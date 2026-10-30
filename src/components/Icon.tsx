@@ -1,0 +1,31 @@
+const paths:Record<string,React.ReactNode>={
+  sliders:<><path d="M4 7h7m5 0h4M4 17h3m5 0h8"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></>,
+  type:<><path d="M4 5h16M12 5v15M8 20h8M4 5v3m16-3v3"/></>,
+  print:<><path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7z"/><path d="M17 11h.01"/></>,
+  download:<><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
+  folder:<><path d="M3 7V4h7l2 3h9v13H3z"/></>,
+  save:<><path d="M4 3h13l4 4v14H3V3zM7 3v6h9V3M7 21v-8h10v8"/></>,
+  cube:<><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10"/></>,
+  top:<><path d="M4 4h16v16H4zM8 8h8v8H8z"/></>,
+  bottom:<><path d="M4 4h16v16H4zM8 16l4-8 4 8z"/></>,
+  front:<><path d="M3 8h18v9H3zM3 12h18"/></>,
+  frame:<><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="12" cy="12" r="3"/></>,
+  plus:<path d="M12 5v14M5 12h14"/>,minus:<path d="M5 12h14"/>,
+  check:<path d="m5 12 4 4L19 6"/>,close:<path d="m6 6 12 12M18 6 6 18"/>,
+  chevron:<path d="m8 10 4 4 4-4"/>,
+  help:<><circle cx="12" cy="12" r="9"/><path d="M9.5 8a2.5 2.5 0 1 1 4 2c-1.5 1-1.5 1-1.5 3m0 3h.01"/></>,
+  refresh:<><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></>,
+  eye:<><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></>,
+  grid:<><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/></>,
+  wire:<><path d="m12 2 9 5v10l-9 5-9-5V7zm0 0v10m-9 5 9-5 9 5M3 7l9 15 9-15"/></>,
+  trash:<><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></>,
+  copy:<><path d="M8 8h13v13H8zM16 8V3H3v13h5"/></>,
+  arrow:<path d="M5 12h14m-5-5 5 5-5 5"/>,
+  install:<><path d="M5 15v6h14v-6M12 3v12m-4-4 4 4 4-4"/></>,
+  warning:<><path d="m12 3 10 18H2zM12 9v5m0 3h.01"/></>,
+  ruler:<><path d="m3 16 13-13 5 5L8 21zM7 12l3 3m1-7 3 3m1-7 3 3"/></>,
+  info:<><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></>,
+};
+export function Icon({name,size=18,...props}:{name:string;size?:number;className?:string}){
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]||paths.cube}</svg>;
+}
