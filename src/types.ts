@@ -7,11 +7,12 @@ export type TextLayer = {
   radius: number; angle: number; clockwise: boolean; kerning: boolean;
 };
 export type Project = {
-  version: number; name: string; units: 'in'|'mm'; rollerCount: number;
+  version: number; name: string; units: 'in'|'mm'; color: string; rollerCount: number;
   rollerDiameter: number; betweenMin: number; betweenMax: number; targetPosition: number;
-  thickness: number; gapWidth: number; gapLength: number; flatLength: number;
+  thickness: number; gapWidth: number; gapLength: number; cageDiameter: number;
   boreEnabled: boolean; boreDiameter: number; compensation: number; compensateBore: boolean;
-  chamferTop: number; chamferBottom: number; quality: 'draft'|'standard'|'fine';
+  chamferTop: number; chamferBottom: number; chamferTopAngle: number; chamferBottomAngle: number;
+  quality: 'draft'|'standard'|'fine'|'ultra';
   texts: TextLayer[]; customFont?: string; customFontName?: string;
 };
 export type Model = {

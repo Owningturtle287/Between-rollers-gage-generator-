@@ -6,7 +6,7 @@ import { derive, localToWorld } from '../core/geometry.mjs';
 export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model|null;project:Project;settings:ViewSettings;zoomCommand:{id:number;factor:number}}){
   const canvas=useRef<HTMLCanvasElement>(null),data=useRef({model,project,settings});
   const pose=useRef({yaw:.55,pitch:.83,zoom:1,panX:0,panY:0});
-  const redraw=useRef<()=>void>(()=>{});
+  const redraw=useRef<()=>void>(()=>{}),referenceRadius=useRef<number|null>(null);
   data.current={model,project,settings};
   useEffect(()=>{
     const el=canvas.current!,ctx=el.getContext('2d');if(!ctx)return;
@@ -16,7 +16,9 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
       const {width,height}=el.getBoundingClientRect(),ratio=Math.min(window.devicePixelRatio||1,2);
       if(el.width!==Math.round(width*ratio)||el.height!==Math.round(height*ratio)){el.width=Math.round(width*ratio);el.height=Math.round(height*ratio);}
       ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,width,height);
-      const d=derive(p),v=pose.current,scale=Math.min(width*.41,height*.37)/(d.pitchRadius+d.rollerRadius)*v.zoom;
+      const d=derive(p),v=pose.current;
+      referenceRadius.current??=d.pitchRadius+d.rollerRadius;
+      const scale=Math.min(width*.41,height*.37)/referenceRadius.current*v.zoom;
       const cx=width*.52+v.panX,cy=height*.52+v.panY;
       const cs=Math.cos(v.yaw),sn=Math.sin(v.yaw),cp=Math.cos(v.pitch),sp=Math.sin(v.pitch);
       const project=(x:number,y:number,z:number)=>{
@@ -62,7 +64,7 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
         const angle=Math.PI/2-i*Math.PI*2/p.rollerCount,[x,y]=localToWorld(0,d.pitchRadius,angle);
         for(const z of [model.zOffset,model.zOffset+p.thickness*1.15])polyline(Array.from({length:49},(_,k)=>{const a=k*Math.PI*2/48;return [x+d.rollerRadius*Math.cos(a),y+d.rollerRadius*Math.sin(a),z];}),'#648b835b',.8,'#6a9c8e0b');
         for(const k of [0,12,24,36]){const a=k*Math.PI*2/48,xx=x+d.rollerRadius*Math.cos(a),yy=y+d.rollerRadius*Math.sin(a);polyline([[xx,yy,model.zOffset],[xx,yy,model.zOffset+p.thickness*1.15]],'#648b8329',.7);}
-        for(const sign of [-1,1])polyline([d.lower,d.upper].map(([xx,yy])=>[...localToWorld(sign*xx,yy,angle),model.zOffset+p.thickness-p.chamferTop]),'#218573a0',1.3);
+        for(const sign of [-1,1])polyline([d.lower,d.upper].map(([xx,yy])=>[...localToWorld(sign*xx,yy,angle),model.zOffset+p.thickness-d.topDepth]),'#218573a0',1.3);
       }}
       if(s.dimensions){ctx.setLineDash([4,4]);polyline(Array.from({length:129},(_,i)=>{const a=i*Math.PI*2/128;return [d.diameter/2*Math.cos(a),d.diameter/2*Math.sin(a),model.zOffset+p.thickness+.2];}),'#b7844c9f',1);ctx.setLineDash([]);polyline([[0,-d.diameter/2,model.zOffset+p.thickness+.2],[0,d.diameter/2,model.zOffset+p.thickness+.2]],'#b7844c9f',1);}
     };
@@ -85,8 +87,8 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
   },[]);
   useEffect(()=>{redraw.current();},[model,settings]);
   useEffect(()=>{
-    const v=pose.current;v.panX=v.panY=0;v.zoom=1;v.yaw=settings.view==='iso'?.55:0;v.pitch=settings.view==='top'?Math.PI/2:settings.view==='bottom'?-Math.PI/2:settings.view==='front'?0:.83;redraw.current();
+    const v=pose.current;referenceRadius.current=null;v.panX=v.panY=0;v.zoom=1;v.yaw=settings.view==='iso'?.55:0;v.pitch=settings.view==='top'?Math.PI/2:settings.view==='bottom'?-Math.PI/2:settings.view==='front'?0:.83;redraw.current();
   },[settings.view,settings.reset]);
   useEffect(()=>{if(zoomCommand.id){pose.current.zoom=Math.max(.15,Math.min(12,pose.current.zoom/zoomCommand.factor));redraw.current();}},[zoomCommand]);
-  return <><canvas ref={canvas} className="software-canvas" tabIndex={0} role="img" aria-label="Interactive 3D gage in compatibility mode. Drag to orbit, right-drag or use two fingers to pan, and pinch or scroll to zoom."/><span className="compatibility-label" title="Software-rendered 3D. Model geometry and export quality are unchanged.">Compatibility 3D</span></>;
+  return <><canvas ref={canvas} className="software-canvas" tabIndex={0} role="img" aria-label="Interactive 3D gage in compatibility mode. Drag to orbit, right-drag or use two fingers to pan, and pinch or scroll to zoom."/></>;
 }

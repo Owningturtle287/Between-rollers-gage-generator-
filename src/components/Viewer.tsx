@@ -9,7 +9,7 @@ import { SoftwareViewer } from './SoftwareViewer';
 type SceneState={scene:THREE.Scene;camera:THREE.PerspectiveCamera;renderer:THREE.WebGLRenderer;controls:OrbitControls;part:THREE.Group;helpers:THREE.Group;grid:THREE.GridHelper;light:THREE.DirectionalLight;frame:()=>void;zoom:(factor:number)=>void;};
 const disposeGroup=(group:THREE.Group)=>{group.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.geometry)mesh.geometry.dispose();if(mesh.material)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])m.dispose();});group.clear();};
 export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;project:Project;settings:ViewSettings;zoomCommand:{id:number;factor:number}}){
-  const root=useRef<HTMLDivElement>(null),state=useRef<SceneState|null>(null),first=useRef(true),lastSize=useRef(0);
+  const root=useRef<HTMLDivElement>(null),state=useRef<SceneState|null>(null),first=useRef(true);
   const projectRef=useRef(project);projectRef.current=project;
   const [error,setError]=useState('');
   useEffect(()=>{
@@ -50,7 +50,7 @@ export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;pr
     const flat=geometry.toNonIndexed();flat.computeVertexNormals();geometry.dispose();
     const material=new THREE.MeshStandardMaterial({color:settings.material,roughness:.54,metalness:.06,wireframe:settings.wireframe});
     const mesh=new THREE.Mesh(flat,material);mesh.castShadow=true;mesh.receiveShadow=true;s.part.add(mesh);
-    if(first.current||derive(project).tipRadius>lastSize.current*2||derive(project).tipRadius<lastSize.current/2){s.frame();first.current=false;}lastSize.current=derive(project).tipRadius;
+    if(first.current){s.frame();first.current=false;}
   },[model,settings.material,settings.wireframe]);
   useEffect(()=>{
     const s=state.current;if(!s||!model)return;disposeGroup(s.helpers);s.grid.visible=settings.grid;
@@ -62,7 +62,7 @@ export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;pr
         const roller=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:'#759d9b',transparent:true,opacity:.22,metalness:.3,roughness:.35,depthWrite:false}));roller.position.set(x,y,z+h/2);s.helpers.add(roller);
         const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo,20),new THREE.LineBasicMaterial({color:'#628c8b',transparent:true,opacity:.4}));edges.position.copy(roller.position);s.helpers.add(edges);
         for(const sign of [-1,1]){
-          const pts=[d.lower,d.upper].map(([xx,yy])=>{const [wx,wy]=localToWorld(sign*xx,yy,a);return new THREE.Vector3(wx,wy,z+h-project.chamferTop+.02);});
+          const pts=[d.lower,d.upper].map(([xx,yy])=>{const [wx,wy]=localToWorld(sign*xx,yy,a);return new THREE.Vector3(wx,wy,z+h-d.topDepth+.02);});
           const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:'#0e8b7c'}));s.helpers.add(line);
         }
       }

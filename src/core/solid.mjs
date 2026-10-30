@@ -1,4 +1,8 @@
-import { baseMesh, derive, insetPolygon, QUALITY } from './geometry.mjs';
+import { baseMesh, derive, validate, QUALITY } from './geometry.mjs';
+import { applyChamfers, faceSection } from './chamfer.mjs';
+
+const baseCache=new WeakMap();
+const baseKey=p=>JSON.stringify({...p,name:undefined,units:undefined,color:undefined,texts:undefined,customFont:undefined,customFontName:undefined});
 
 function pathContours(commands, steps) {
   const out=[];let contour=[],current=[0,0];
@@ -70,12 +74,20 @@ export function compactMesh(mesh) {
 
 /** All lettering is booleaned into the actual export solid. */
 export async function buildSolid(api,p,resolveFont) {
+  const issues=validate(p);if(issues.length)throw new Error(issues.join(' '));
   const started=performance.now(),owned=new Set();
   const keep=x=>{owned.add(x);return x;};
   try{
-    const base=baseMesh(p),d=derive(p);
-    let solid=keep(new api.Manifold(new api.Mesh({numProp:3,vertProperties:base.positions,triVerts:base.indices})));
-    if(solid.status()!=='NoError')throw new Error(`The base solid could not be constructed (${solid.status()}).`);
+    const key=baseKey(p),d=derive(p);
+    let cached=baseCache.get(api);
+    if(!cached||cached.key!==key){
+      const base=baseMesh(p);
+      let body=keep(new api.Manifold(new api.Mesh({numProp:3,vertProperties:base.positions,triVerts:base.indices})));
+      if(body.status()!=='NoError')throw new Error(`The base solid could not be constructed (${body.status()}).`);
+      body=applyChamfers(api,body,base.outline,p,d,keep);
+      cached?.solid.delete();cached={key,solid:body,outline:base.outline};baseCache.set(api,cached);owned.delete(body);
+    }
+    let solid=cached.solid;
     for(const t of p.texts||[]) if(t.enabled&&t.text.trim()){
       const font=await resolveFont(t,p);
       const glyphs=letteringContours(font,t,(QUALITY[p.quality]||QUALITY.standard).curveSegments);
@@ -83,9 +95,7 @@ export async function buildSolid(api,p,resolveFont) {
       const sections=glyphs.map(contours=>keep(new api.CrossSection(contours,'EvenOdd')));
       const text=keep(api.CrossSection.union(sections));
       const faceChamfer=t.face==='top'?p.chamferTop:p.chamferBottom;
-      const faceContours=[insetPolygon(base.outline,faceChamfer+.03)];
-      if(d.bore>0)faceContours.push(Array.from({length:256},(_,i)=>{const a=-i*2*Math.PI/256;const r=d.bore/2+faceChamfer+.03;return [r*Math.cos(a),r*Math.sin(a)];}));
-      const face=keep(new api.CrossSection(faceContours,'EvenOdd'));
+      const face=faceSection(api,cached.outline,d.bore,faceChamfer+.03,keep,(QUALITY[p.quality]||QUALITY.standard).circleSegments);
       const outside=keep(text.subtract(face));
       if(outside.area()>.002)throw new Error(`Text “${t.text.slice(0,24)}” crosses a relief, bore, chamfer, or outer edge. Move it inward or reduce its size.`);
       const eps=.03;

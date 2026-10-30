@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULTS, derive, importProject, validate } from './core/geometry.mjs';
+import { DEFAULTS, QUALITY, derive, importProject, validate } from './core/geometry.mjs';
 import { FORMATS, exportModel, safeName } from './core/export.mjs';
 import { Field, Section, Toggle } from './components/Fields';
 import { Viewer } from './components/Viewer';
@@ -21,7 +21,7 @@ function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:
   </dialog>;
 }
 function Select({label,value,onChange,options}:{label:string;value:string;onChange:(s:string)=>void;options:{value:string;label:string}[]}){
-  return <label className="field"><span className="field-label">{label}</span><select value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
+  return <label className="field"><span className="field-label">{label}</span><select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
 export default function App(){
@@ -30,12 +30,12 @@ export default function App(){
   const [buildError,setBuildError]=useState({signature:'',message:''}),[saved,setSaved]=useState(true);
   const [modal,setModal]=useState<null|'export'|'help'>(null),[format,setFormat]=useState('3mf'),[exporting,setExporting]=useState(false);
   const [selectedText,setSelectedText]=useState(p.texts[0]?.id||''),[notice,setNotice]=useState(''),[hasUndo,setHasUndo]=useState(false);
-  const [settings,setSettings]=useState<ViewSettings>({rollers:true,dimensions:false,grid:true,wireframe:false,material:'#dbceb1',view:'iso',reset:0});
+  const [settings,setSettings]=useState<ViewSettings>({rollers:true,dimensions:false,grid:true,wireframe:false,material:DEFAULTS.color,view:'iso',reset:0});
   const [zoom,setZoom]=useState({id:0,factor:1});
   const [installEvent,setInstallEvent]=useState<(Event&{prompt:()=>Promise<void>})|null>(null);
   const fileInput=useRef<HTMLInputElement>(null),fontInput=useRef<HTMLInputElement>(null),worker=useRef<Worker|null>(null);
   const jobs=useRef(new Map<number,Project>()),requestId=useRef(0),undo=useRef<Project|null>(null);
-  const signature=JSON.stringify({...p,name:undefined,units:undefined,customFontName:undefined});
+  const signature=JSON.stringify({...p,name:undefined,units:undefined,color:undefined,customFontName:undefined});
   const currentSignature=useRef(signature);currentSignature.current=signature;
   const issues=validate(p),d=derive(p),error=buildError.signature===signature?buildError.message:'';
   const building=model?.signature!==signature&&!issues.length&&!error;
@@ -54,7 +54,7 @@ export default function App(){
       const data=e.data;
       if(data.id!==requestId.current)return;
       const project=jobs.current.get(data.id);jobs.current.clear();
-      if(data.error){if(project)setBuildError({signature:JSON.stringify({...project,name:undefined,units:undefined,customFontName:undefined}),message:data.error});return;}
+      if(data.error){if(project)setBuildError({signature:JSON.stringify({...project,name:undefined,units:undefined,color:undefined,customFontName:undefined}),message:data.error});return;}
       if(data.model.signature!==currentSignature.current)return;
       setModel(data.model);if(project)setRenderedProject(project);setBuildError({signature:'',message:''});
     };
@@ -113,7 +113,7 @@ export default function App(){
   return <div className="app-shell">
     <header className="app-header">
       <a className="brand" href="./" aria-label="Between Rollers Gage Studio"><img src="./icon.svg" alt=""/><span><strong>BETWEEN ROLLERS</strong><small>GAGE STUDIO</small></span></a>
-      <div className="header-divider"/><label className="project-title"><span className="sr-only">Project name</span><input value={p.name} maxLength={80} onChange={e=>update('name',e.target.value)}/><span className={`save-status ${saved?'saved':''}`} title={saved?'Saved on this device':'Saving on this device'}><span/>{saved?'Saved locally':'Saving…'}</span></label>
+      <div className="header-divider"/><label className="project-title"><span className="sr-only">Project name</span><input aria-label="Project name" value={p.name} maxLength={80} onChange={e=>update('name',e.target.value)}/><span className={`save-status ${saved?'saved':''}`} title={saved?'Saved on this device':'Saving on this device'}><span/>{saved?'Saved':'Saving…'}</span></label>
       <nav className="header-actions" aria-label="Project actions">
         <button className="icon-button" title="New gage" aria-label="New gage" onClick={newProject}><Icon name="plus"/></button>
         <button className="icon-button" title="Open project" aria-label="Open project" onClick={()=>fileInput.current?.click()}><Icon name="folder"/></button>
@@ -126,8 +126,7 @@ export default function App(){
     </header>
     <main className="app-body">
       <aside className="sidebar" aria-label="Gage parameters">
-        <div className="panel-heading"><span>Make it yours.</span><div className="unit-switch" aria-label="Display units">{(['in','mm'] as const).map(u=><button key={u} className={units===u?'selected':''} aria-pressed={units===u} onClick={()=>update('units',u)}>{u}</button>)}</div></div>
-        <nav className="tabs" aria-label="Parameter groups">{([{id:'geometry',label:'Geometry',icon:'sliders'},{id:'text',label:'Lettering',icon:'type'},{id:'print',label:'Print setup',icon:'print'}] as const).map(t=><button key={t.id} className={tab===t.id?'active':''} aria-pressed={tab===t.id} onClick={()=>setTab(t.id)}><Icon name={t.icon} size={16}/>{t.label}</button>)}</nav>
+        <nav className="tabs" aria-label="Parameter groups">{([{id:'geometry',label:'Geometry',icon:'sliders'},{id:'text',label:'Lettering',icon:'type'},{id:'print',label:'Print setup',icon:'print'}] as const).map(t=><button key={t.id} className={tab===t.id?'active':''} aria-pressed={tab===t.id} onClick={()=>setTab(t.id)}><Icon name={t.icon} size={16}/>{t.label}</button>)}<div className="unit-switch" aria-label="Display units">{(['in','mm'] as const).map(u=><button key={u} className={units===u?'selected':''} aria-pressed={units===u} onClick={()=>update('units',u)}>{u}</button>)}</div></nav>
         <div className="panel-scroll">
           {tab==='geometry'&&<>
             <Section number="01" title="Roller arrangement">
@@ -143,8 +142,8 @@ export default function App(){
             <Section number="03" title="Gage & probe clearance">
               <Field label="Gage thickness" value={p.thickness} onChange={v=>update('thickness',v)} units={units}/>
               <div className="field-grid"><Field label="Space gap width" value={p.gapWidth} onChange={v=>update('gapWidth',v)} units={units} help="Width between the parallel relief walls, below the two tangent contact flats."/><Field label="Space gap length" value={p.gapLength} onChange={v=>update('gapLength',v)} units={units} help="Radial distance from the inward roller apex to the bottom of the relief slot."/></div>
-              <Field label="Contact flat length" value={p.flatLength} onChange={v=>update('flatLength',v)} units={units} help="Length of each flat. The tangency point is at the exact midpoint. The angle is solved automatically."/>
-              <div className="contact-callout"><Icon name="check" size={15}/><span>Contact angle auto-adjusts to <strong>{Number.isFinite(d.contactAngle)?(d.contactAngle*180/Math.PI).toFixed(2):'—'}°</strong></span></div>
+              <Field label="Cage Clearance Diameter" value={p.cageDiameter} onChange={v=>update('cageDiameter',v)} units={units} help="The very outside diameter of the gage before printing compensation. Contact flats auto-size and remain tangent at their midpoints."/>
+              <div className="contact-callout"><Icon name="check" size={15}/><span>Auto flat length: <strong>{fmt(d.flatLength)} {units}</strong> · {(d.contactAngle*180/Math.PI).toFixed(1)}°</span></div>
             </Section>
             <Section number="04" title="Center bore">
               <Toggle label="Add a through bore" checked={p.boreEnabled} onChange={v=>update('boreEnabled',v)}/>
@@ -153,7 +152,7 @@ export default function App(){
             <div className="panel-link"><Icon name="print" size={16}/><button onClick={()=>setTab('print')}>Set compensation & chamfers</button><Icon name="arrow" size={16}/></div>
           </>}
           {tab==='text'&&<>
-            <div className="text-intro"><div><h3>Leave your mark.</h3><p>Real embossed or engraved geometry.</p></div><button className="small-button" disabled={p.texts.length>=6} onClick={addText}><Icon name="plus" size={14}/>Add text</button></div>
+            <div className="text-intro"><div><h3>Text layers</h3><p>Real embossed or engraved geometry.</p></div><button className="small-button" disabled={p.texts.length>=6} onClick={addText}><Icon name="plus" size={14}/>Add text</button></div>
             <div className="layer-list">{p.texts.map((t,i)=><button key={t.id} className={`layer ${activeText?.id===t.id?'active':''}`} onClick={()=>setSelectedText(t.id)}><span className="layer-icon"><Icon name="type" size={17}/></span><span><strong>{t.text.split('\n')[0]||`Text layer ${i+1}`}</strong><small>{t.face} face · {t.mode}{t.enabled?'':' · hidden'}</small></span><span className="layer-index">{String(i+1).padStart(2,'0')}</span></button>)}</div>
             {activeText?<>
               <div className="text-actions"><Toggle label="Include this layer" checked={activeText.enabled} onChange={v=>updateText('enabled',v)}/><button className="icon-button" title="Duplicate layer" aria-label="Duplicate layer" disabled={p.texts.length>=6} onClick={()=>{const id=crypto.randomUUID();setP(prev=>({...prev,texts:[...prev.texts,{...activeText,id,y:activeText.y-activeText.size*1.5}]}));setSelectedText(id);}}><Icon name="copy" size={15}/></button><button className="icon-button danger" title="Delete layer" aria-label="Delete layer" onClick={()=>{setP(prev=>({...prev,texts:prev.texts.filter(t=>t.id!==activeText.id)}));setSelectedText('');}}><Icon name="trash" size={15}/></button></div>
@@ -188,13 +187,13 @@ export default function App(){
               <Toggle label="Also compensate bore diameter" checked={p.compensateBore} onChange={v=>update('compensateBore',v)} description={p.boreEnabled?`Modeled bore Ø ${fmt(d.bore)} ${units}`:'Applies when the center bore is enabled'}/>
             </Section>
             <Section number="02" title="Face chamfers">
-              <p className="section-description">Independent 45° chamfers around the perimeter, reliefs, and bore. Enter zero for a sharp edge.</p>
-              <div className="field-grid"><Field label="Top chamfer" value={p.chamferTop} onChange={v=>update('chamferTop',v)} units={units}/><Field label="Bottom chamfer" value={p.chamferBottom} onChange={v=>update('chamferBottom',v)} units={units}/></div>
+              <p className="section-description">Size is the setback along the flat face. Angle is measured from that face. Enter zero size for a sharp edge.</p>
+              <div className="field-grid"><Field label="Top chamfer" value={p.chamferTop} onChange={v=>update('chamferTop',v)} units={units}/><Field label="Top angle" value={p.chamferTopAngle} onChange={v=>update('chamferTopAngle',v)} units="deg" dimension={false} min={1} max={89}/><Field label="Bottom chamfer" value={p.chamferBottom} onChange={v=>update('chamferBottom',v)} units={units}/><Field label="Bottom angle" value={p.chamferBottomAngle} onChange={v=>update('chamferBottomAngle',v)} units="deg" dimension={false} min={1} max={89}/></div>
               <div className="subtle-note"><Icon name="ruler" size={14}/>Full contact height: {fmt(d.contactHeight)} {units}</div>
             </Section>
             <Section number="03" title="Mesh quality">
-              <Select label="Curve resolution" value={p.quality} onChange={v=>update('quality',v)} options={[{value:'draft',label:'Draft · quick editing'},{value:'standard',label:'Standard · 0.025 mm curve tolerance'},{value:'fine',label:'Fine · 0.008 mm curve tolerance'}]}/>
-              <p className="fine-note">The preview and every exported format use the same watertight solid, including text and chamfers.</p>
+              <Select label="Curve resolution" value={p.quality} onChange={v=>update('quality',v)} options={Object.entries(QUALITY).map(([value,q])=>({value,label:`${({draft:'Draft',standard:'Standard',fine:'Fine',ultra:'Ultra fine'} as Record<string,string>)[value]} · ${fmt(q.tolerance,units==='in'?4:4)} ${units} chord tolerance`}))}/>
+              <p className="fine-note">Resolution controls curve smoothness. It does not change the entered chamfer size or angle.</p>
             </Section>
             <Section number="04" title="Desktop & phone">
               <p className="section-description">Install Gage Studio for a dedicated window and home-screen icon. The app works offline after its first complete load.</p>
@@ -205,16 +204,13 @@ export default function App(){
           <div className="sidebar-foot"><img src="./icon.svg" alt=""/><span>Made for the measurement.</span><button aria-label="Open geometry guide" onClick={()=>setModal('help')}><Icon name="help" size={16}/></button></div>
         </div>
       </aside>
-      <section className="workspace" aria-label="3D design workspace">
-        <Viewer model={model} project={renderedProject} settings={settings} zoomCommand={zoom}/>
-        <div className="workspace-heading"><div className="eyebrow"><span className={`status-dot ${ready?'':'pending'}`}/>{ready?'LIVE MODEL':building?'UPDATING MODEL':'MODEL NEEDS ATTENTION'}</div><h1>{p.rollerCount}<span> roller gage</span></h1><p>Centered contacts. Open apexes.</p></div>
-        <div className="model-health"><div><Icon name={ready?'check':building?'refresh':'warning'} size={15}/><strong>{ready?'One watertight solid':building?'Building solid…':'Review parameters'}</strong></div><span>{model?`${model.triangles.toLocaleString()} triangles · ${(model.volume/1000).toFixed(1)} cm³`:'Loading geometry engine'}</span><small>MESH IN MM · Z UP</small></div>
+      <section className="workspace" aria-label="3D design workspace" aria-busy={building}>
+        <output className="sr-only" role="status">{ready?'Model ready':building?'Updating model':'Review model settings'}</output>
+        <Viewer model={model} project={renderedProject} settings={{...settings,material:p.color}} zoomCommand={zoom}/>
         <div className="viewport-tools"><div className="tool-group">{viewButton('iso','cube','Isometric view · 1')}{viewButton('top','top','Top view · 2')}{viewButton('bottom','bottom','Bottom view · 3')}{viewButton('front','front','Front view · 4')}</div><div className="tool-group"><button className="tool-button" aria-label="Zoom in" title="Zoom in" onClick={()=>setZoom(z=>({id:z.id+1,factor:.82}))}><Icon name="plus"/></button><button className="tool-button" aria-label="Zoom out" title="Zoom out" onClick={()=>setZoom(z=>({id:z.id+1,factor:1.22}))}><Icon name="minus"/></button><button className="tool-button" aria-label="Fit model" title="Fit model · F" onClick={()=>setSettings(s=>({...s,reset:s.reset+1}))}><Icon name="frame"/></button></div></div>
-        <div className="display-tools" aria-label="Preview options">{([{key:'rollers',icon:'eye',title:'Roller guides'},{key:'dimensions',icon:'ruler',title:'Diameter guide'},{key:'grid',icon:'grid',title:'Grid'},{key:'wireframe',icon:'wire',title:'Wireframe'}] as const).map(t=><button key={t.key} className={`tool-button ${settings[t.key]?'active':''}`} aria-label={t.title} title={t.title} aria-pressed={settings[t.key]} onClick={()=>updateView(t.key,!settings[t.key])}><Icon name={t.icon}/></button>)}<span className="tool-separator"/><button className="material-swatch" style={{background:'#dbceb1'}} aria-label="Ivory preview material" aria-pressed={settings.material==='#dbceb1'} onClick={()=>updateView('material','#dbceb1')}/><button className="material-swatch" style={{background:'#568c86'}} aria-label="Teal preview material" aria-pressed={settings.material==='#568c86'} onClick={()=>updateView('material','#568c86')}/><button className="material-swatch" style={{background:'#747c87'}} aria-label="Graphite preview material" aria-pressed={settings.material==='#747c87'} onClick={()=>updateView('material','#747c87')}/></div>
+        <div className="display-tools" aria-label="Preview options">{([{key:'rollers',icon:'eye',title:'Roller guides'},{key:'dimensions',icon:'ruler',title:'Diameter guide'},{key:'grid',icon:'grid',title:'Grid'},{key:'wireframe',icon:'wire',title:'Wireframe'}] as const).map(t=><button key={t.key} className={`tool-button ${settings[t.key]?'active':''}`} aria-label={t.title} title={t.title} aria-pressed={settings[t.key]} onClick={()=>updateView(t.key,!settings[t.key])}><Icon name={t.icon}/></button>)}<span className="tool-separator"/><label className="color-control" title="Gage color"><span className="sr-only">Gage color</span><input type="color" aria-label="Gage color" value={p.color} onChange={e=>update('color',e.target.value)}/></label></div>
         {(issues.length>0||error)&&<div className="validation-banner" role="alert"><Icon name="warning" size={18}/><div><strong>Adjust the model to continue</strong>{(issues.length?issues:[error]).map((msg:string)=><p key={msg}>{msg}</p>)}{model&&<small>Showing the previous valid model. Export is paused.</small>}</div></div>}
         {building&&<div className="building-pill"><span className="spinner"/>{model?'Updating geometry':'Preparing your workspace'}</div>}
-        <div className="workspace-bottom"><div className="model-metrics"><div><span>DESIGN TARGET</span><strong>Ø {fmt(d.nominal)} <small>{units}</small></strong></div><div><span>THICKNESS</span><strong>{fmt(p.thickness)} <small>{units}</small></strong></div><div><span>CONTACT ANGLE</span><strong>{Number.isFinite(d.contactAngle)?(d.contactAngle*180/Math.PI).toFixed(2):'—'}<small>°</small></strong></div></div><div className="orbit-hint"><span>Drag to orbit</span><b>·</b><span>Pinch / scroll to zoom</span><b>·</b><span>Two fingers / right-drag to pan</span></div></div>
-        <div className="axis-compass" aria-hidden="true"><span className="axis-z">Z</span><span className="axis-y">Y</span><span className="axis-x">X</span><svg width="56" height="56" viewBox="0 0 56 56"><path d="M27 29V5" stroke="#3f829c"/><path d="m27 29 21 12" stroke="#ac6d50"/><path d="M27 29 7 41" stroke="#6c9567"/><circle cx="27" cy="29" r="2" fill="#7e8c88"/></svg></div>
       </section>
     </main>
     {notice&&<div className="toast" role="status"><Icon name="info" size={17}/><span>{notice}</span>{hasUndo&&<button onClick={()=>{if(undo.current){setP(undo.current);setSelectedText(undo.current.texts[0]?.id||'');setHasUndo(false);setNotice('Previous project restored.');}}}>Undo</button>}<button className="icon-button" aria-label="Dismiss notification" onClick={()=>setNotice('')}><Icon name="close" size={15}/></button></div>}
@@ -222,13 +218,13 @@ export default function App(){
       <p className="modal-description">Export the gage at its modeled size. Roller guides, grids, and dimensions are excluded.</p>
       <div className="export-summary"><span className="export-model-icon"><Icon name="cube" size={28}/></span><div><strong>{p.name||'My roller gage'}</strong><span>{p.rollerCount} rollers · Ø {fmt(d.diameter)} {units} modeled span</span></div><span className={`health-chip ${ready?'':'invalid'}`}>{ready?'Watertight':'Not ready'}</span></div>
       <div className="export-formats" role="radiogroup" aria-label="Export format">{FORMATS.map(f=><label key={f.id} className={`format-option ${format===f.id?'selected':''}`}><input type="radio" name="format" value={f.id} checked={format===f.id} onChange={()=>setFormat(f.id)}/><strong>{f.label}</strong><span>{f.detail}</span>{f.id==='3mf'&&<small>BEST FOR PRINTING</small>}</label>)}</div>
-      <div className="export-notes"><Icon name="info" size={17}/><p>{format==='3mf'?'3MF contains one solid in explicit millimeter units and a copy of the editable project. Open it as a model in your slicer.':'STL, OBJ, and PLY use millimeter coordinates. GLB uses meters and Y-up for standard 3D viewers.'}<br/>Lettering and chamfers are built into every exported mesh.</p></div>
+      <div className="export-notes"><Icon name="info" size={17}/><p>{format==='3mf'?'3MF contains one solid in explicit millimeter units and a copy of the editable project. Open it as a model in your slicer.':'STL, OBJ, and PLY use millimeter coordinates. GLB uses meters and Y-up for standard 3D viewers.'}<br/>Lettering and chamfers are built into every exported mesh.<br/>{model?.triangles.toLocaleString()} triangles · {model?(model.volume/1000).toFixed(1):'—'} cm³</p></div>
       {!ready&&<p className="export-error">{issues[0]||error||'Wait for the current model to finish building before exporting.'}</p>}
       <div className="modal-buttons"><button className="small-button" onClick={saveProject}><Icon name="save" size={16}/>Save project</button>{typeof navigator.share==='function'&&<button className="small-button" disabled={!ready||exporting} onClick={()=>void exportFile(true)}>Share file</button>}<button className="export-button" disabled={!ready||exporting} onClick={()=>void exportFile()}><Icon name="download" size={17}/>{exporting?'Exporting…':`Download .${format}`}</button></div>
     </Modal>}
     {modal==='help'&&<Modal title="A guide to the geometry." onClose={()=>setModal(null)}>
       <img className="help-diagram" src="./geometry-guide.svg" alt="A roller seated between two tangent flats, with its inward apex exposed over an open relief slot."/>
-      <div className="help-copy"><h3>Defined from the roller outward</h3><p>The between-roller diameter is the circle through the inward-facing apexes. The roller center radius is half that diameter plus half the roller diameter. Slots repeat evenly around the gage.</p><h3>Centered, tangent contact flats</h3><p>Each flat touches the roller at its exact midpoint. Its normal passes through the roller center, making it perpendicular to the surface at contact. Gap width and flat length determine the contact angle automatically.</p><h3>Two dimensions for probe access</h3><p>Gap width is the distance between the parallel relief walls. Gap length runs radially inward from the roller apex to the slot floor. Chamfers reduce the usable contact height at the top and bottom.</p><h3>Compensation is on the diameter</h3><p>Positive compensation enlarges the between-roller span by exactly the entered amount; each radial side shifts by half. Bore compensation can be toggled separately. This is an additive size correction, not a percentage shrink scale.</p><h3>Working with the model</h3><p>Drag to orbit. Scroll or pinch to zoom. Right-drag, Shift-drag, or use two fingers to pan. Use 1–4 for views and F to fit. Roller guides do not export. The saved project keeps every setting, including uploaded fonts.</p><h3>Before making a measuring tool</h3><p>The model describes the nominal seating geometry. Verify probe-ball access, roller seating, and finished dimensions on the actual printed part; material stiffness and printing process affect the result.</p></div>
+      <div className="help-copy"><h3>Defined from the roller outward</h3><p>The between-roller diameter is the circle through the inward-facing apexes. The roller center radius is half that diameter plus half the roller diameter. Slots repeat evenly around the gage.</p><h3>Centered, tangent contact flats</h3><p>Each flat touches the roller at its exact midpoint. Its normal passes through the roller center, making it perpendicular to the surface at contact. Cage Clearance Diameter sets the outside tooth diameter. Flat length and contact angle are solved automatically from that diameter and the gap width.</p><h3>Two dimensions for probe access</h3><p>Gap width is the distance between the parallel relief walls. Gap length runs radially inward from the roller apex to the slot floor. Chamfers reduce the usable contact height at the top and bottom.</p><h3>Compensation is on the diameter</h3><p>Positive compensation enlarges both the between-roller span and the specified cage clearance diameter by exactly the entered amount; each radial side shifts by half. Bore compensation can be toggled separately. This is an additive size correction, not a percentage shrink scale.</p><h3>Working with the model</h3><p>Drag to orbit. Scroll or pinch to zoom. Right-drag, Shift-drag, or use two fingers to pan. Use 1–4 for views and F to fit. Roller guides do not export. The saved project keeps every setting, including uploaded fonts.</p><h3>Before making a measuring tool</h3><p>The model describes the nominal seating geometry. Verify probe-ball access, roller seating, and finished dimensions on the actual printed part; material stiffness and printing process affect the result.</p></div>
       <div className="modal-buttons"><button className="export-button" onClick={()=>setModal(null)}>Back to the model<Icon name="arrow" size={16}/></button></div>
     </Modal>}
   </div>;

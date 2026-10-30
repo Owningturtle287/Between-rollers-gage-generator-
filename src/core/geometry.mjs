@@ -1,13 +1,13 @@
 import { ShapeUtils, Vector2 } from 'three';
 
 export const DEFAULTS = {
-  version: 1, name: 'My roller gage', units: 'in',
+  version: 2, name: 'My roller gage', units: 'in', color: '#a9d5f0',
   rollerCount: 12, rollerDiameter: 12.7,
   betweenMin: 101.346, betweenMax: 101.854, targetPosition: 0.5,
   thickness: 6.35, gapWidth: 5.588, gapLength: 5.08,
-  flatLength: 5.08, boreEnabled: true, boreDiameter: 12.7,
+  cageDiameter: 109.84467545022416, boreEnabled: true, boreDiameter: 12.7,
   compensation: 0, compensateBore: true,
-  chamferTop: 0.381, chamferBottom: 0.381, quality: 'standard',
+  chamferTop: 0.381, chamferBottom: 0.381, chamferTopAngle: 45, chamferBottomAngle: 45, quality: 'standard',
   texts: [{ id: 'label-1', enabled: true, text: 'GAGE STUDIO',
     face: 'top', mode: 'emboss', layout: 'arc', font: 'sans', weight: 'regular',
     italic: false, size: 4.4, depth: 0.5, tracking: 0.3,
@@ -20,57 +20,86 @@ export const QUALITY = {
   draft: { arcSegments: 4, circleSegments: 96, curveSegments: 5, tolerance: 0.08 },
   standard: { arcSegments: 10, circleSegments: 256, curveSegments: 10, tolerance: 0.025 },
   fine: { arcSegments: 24, circleSegments: 720, curveSegments: 20, tolerance: 0.008 },
+  ultra: { arcSegments: 40, circleSegments: 1200, curveSegments: 32, tolerance: 0.0025 },
 };
 const finite = (n) => typeof n === 'number' && Number.isFinite(n);
 const rad = (d) => d * Math.PI / 180;
+
+/** Previous flat-length projects migrate without changing their envelope. */
+export function legacyCageDiameter(p) {
+  const nominal=p.betweenMin+(p.betweenMax-p.betweenMin)*p.targetPosition;
+  const c=(nominal+p.compensation+p.rollerDiameter)/2,r=p.rollerDiameter/2,h=p.flatLength/2;
+  const beta=Math.atan2(h,r)+Math.asin(p.gapWidth/(2*Math.hypot(r,h)));
+  return 2*Math.hypot(r*Math.sin(beta)+h*Math.cos(beta),c-r*Math.cos(beta)+h*Math.sin(beta))-p.compensation;
+}
+
+export function chamferDepth(size, angle) { return size*Math.tan(rad(angle)); }
+
+export function solveFlat(pitchRadius, rollerRadius, gapWidth, outerRadius) {
+  const at=h=>{
+    const angle=Math.atan2(h,rollerRadius)+Math.asin(gapWidth/(2*Math.hypot(rollerRadius,h)));
+    const sx=rollerRadius*Math.sin(angle),sy=pitchRadius-rollerRadius*Math.cos(angle);
+    const lower=[sx-h*Math.cos(angle),sy-h*Math.sin(angle)];
+    const upper=[sx+h*Math.cos(angle),sy+h*Math.sin(angle)];
+    return {angle,contact:[sx,sy],lower,upper,flatLength:2*h,radius:Math.hypot(...upper)};
+  };
+  const minimum=at(0);
+  if(!finite(outerRadius)||!finite(minimum.radius)||outerRadius<=minimum.radius) return {...minimum,flatLength:NaN};
+  let lo=0,hi=Math.max(rollerRadius,outerRadius);
+  for(let i=0;i<20&&at(hi).radius<outerRadius;i++)hi*=2;
+  for(let i=0;i<64;i++){const mid=(lo+hi)/2;if(at(mid).radius<outerRadius)lo=mid;else hi=mid;}
+  return at((lo+hi)/2);
+}
 
 export function derive(p) {
   const nominal = p.betweenMin + (p.betweenMax - p.betweenMin) * p.targetPosition;
   const diameter = nominal + p.compensation;
   const r = p.rollerDiameter / 2;
   const pitchRadius = diameter / 2 + r;
-  const halfFlat = p.flatLength / 2;
-  const angle = Math.atan2(halfFlat, r) + Math.asin(p.gapWidth / (2 * Math.hypot(r, halfFlat)));
-  const sx = r * Math.sin(angle), sy = pitchRadius - r * Math.cos(angle);
-  const lower = [sx - halfFlat * Math.cos(angle), sy - halfFlat * Math.sin(angle)];
-  const upper = [sx + halfFlat * Math.cos(angle), sy + halfFlat * Math.sin(angle)];
+  const tipRadius=(p.cageDiameter+p.compensation)/2;
+  const flat=solveFlat(pitchRadius,r,p.gapWidth,tipRadius);
+  const {angle,lower,upper}=flat;
   const floor = diameter / 2 - p.gapLength;
-  const tipRadius = Math.hypot(...upper);
   const bore = p.boreEnabled ? p.boreDiameter + (p.compensateBore ? p.compensation : 0) : 0;
   const toothAngle = Math.PI / p.rollerCount - Math.atan2(upper[0], upper[1]);
+  const topDepth=chamferDepth(p.chamferTop,p.chamferTopAngle);
+  const bottomDepth=chamferDepth(p.chamferBottom,p.chamferBottomAngle);
   return { nominal, diameter, rollerRadius: r, pitchRadius, contactAngle: angle,
-    contact: [sx, sy], lower, upper, floor, tipRadius, bore,
+    contact: flat.contact, flatLength:flat.flatLength, lower, upper, floor, tipRadius, bore, topDepth, bottomDepth,
     toothWidth: 2 * tipRadius * Math.sin(toothAngle),
-    web: floor - bore / 2, contactHeight: p.thickness - p.chamferTop - p.chamferBottom,
+    web: floor - bore / 2, contactHeight: p.thickness - topDepth - bottomDepth,
   };
 }
 
 export function validate(p) {
   const issues = [];
   const keys = ['rollerCount','rollerDiameter','betweenMin','betweenMax','targetPosition','thickness',
-    'gapWidth','gapLength','flatLength','boreDiameter','compensation','chamferTop','chamferBottom'];
+    'gapWidth','gapLength','cageDiameter','boreDiameter','compensation','chamferTop','chamferBottom','chamferTopAngle','chamferBottomAngle'];
   if (keys.some(k => !finite(p[k]))) return ['Every dimension must be a finite number.'];
   if (!Number.isInteger(p.rollerCount) || p.rollerCount < 3 || p.rollerCount > 80) issues.push('Use a whole roller count from 3 to 80.');
   if (p.betweenMin <= 0 || p.betweenMax < p.betweenMin) issues.push('Between-roller maximum must be at least the positive minimum.');
   if (p.targetPosition < 0 || p.targetPosition > 1) issues.push('The target must be inside the minimum and maximum.');
-  for (const [key,label] of [['rollerDiameter','Roller diameter'],['thickness','Thickness'],['gapWidth','Gap width'],['gapLength','Gap length'],['flatLength','Contact flat length']]) {
+  for (const [key,label] of [['rollerDiameter','Roller diameter'],['thickness','Thickness'],['gapWidth','Gap width'],['gapLength','Gap length'],['cageDiameter','Cage Clearance Diameter']]) {
     if (p[key] <= 0) issues.push(`${label} must be greater than zero.`);
   }
   if (p.gapWidth >= p.rollerDiameter) issues.push('Gap width must be smaller than the roller diameter.');
   if (p.boreEnabled && p.boreDiameter <= 0) issues.push('Bore diameter must be greater than zero.');
   if (p.chamferTop < 0 || p.chamferBottom < 0) issues.push('Chamfer sizes cannot be negative.');
-  if (p.thickness - p.chamferTop - p.chamferBottom < 0.2) issues.push('Leave at least 0.2 mm of full-size contact height between chamfers.');
-  if (p.thickness > 1000 || p.betweenMax > 10000 || p.rollerDiameter > 1000) issues.push('Dimensions exceed the supported modeling range (10 m span / 1 m roller or thickness).');
+  if(p.chamferTopAngle<1||p.chamferTopAngle>89||p.chamferBottomAngle<1||p.chamferBottomAngle>89)issues.push('Chamfer angles must be between 1° and 89°, measured from the flat face.');
+  if (p.thickness > 1000 || p.betweenMax > 10000 || p.cageDiameter>10000 || p.rollerDiameter > 1000) issues.push('Dimensions exceed the supported modeling range (10 m span / 1 m roller or thickness).');
+  if(p.color&&!/^#[0-9a-f]{6}$/i.test(p.color))issues.push('Choose a valid six-digit gage color.');
   if (issues.length) return issues;
   const d = derive(p);
+  const format=n=>`${(n/(p.units==='in'?25.4:1)).toFixed(p.units==='in'?4:3)} ${p.units||'mm'}`;
   if (d.diameter > 10000 || !finite(d.pitchRadius)) issues.push('The compensated diameter exceeds the 10 m modeling range.');
-  if (!finite(d.contactAngle) || d.contactAngle > rad(80)) issues.push('The gap and flat length leave too little outward support. Reduce their sizes.');
+  if(!finite(d.flatLength)||d.flatLength<.01)issues.push('Cage Clearance Diameter is too small for the roller span and gap. Increase the outside diameter.');
+  if (!finite(d.contactAngle) || d.contactAngle > rad(85)) issues.push('Cage Clearance Diameter is too large for centered outward support. Reduce it or change the roller/gap dimensions.');
   if (d.diameter <= 0 || d.bore < 0) issues.push('Compensation makes a diameter zero or negative.');
   if (d.lower[1] <= d.floor + .05) issues.push('Increase gap length so the relief reaches below the contact flats.');
-  if (d.toothWidth < .6) issues.push('Teeth are too narrow. Increase the between-roller diameter or reduce the roller, gap, flat length, or count.');
+  if (d.toothWidth < .3) issues.push('The outside diameter leaves no room between neighboring seats. Reduce Cage Clearance Diameter, gap width, or roller count.');
   if (2 * d.pitchRadius * Math.sin(Math.PI / p.rollerCount) <= p.rollerDiameter + .05) issues.push('Neighboring rollers overlap. Increase the span or reduce roller count or diameter.');
-  if (d.web <= 2 * Math.max(p.chamferTop,p.chamferBottom) + .4) issues.push('The bore and relief leave too little material. Reduce bore, gap length, or chamfers.');
-  if (Math.max(p.chamferTop,p.chamferBottom) * 2 >= d.toothWidth - .2) issues.push('Chamfers consume the tooth face. Reduce chamfer size.');
+  if (d.web <= .2) issues.push('The bore and relief leave too little material. Reduce the bore or gap length.');
+  if(d.contactHeight<.05)issues.push(`Chamfers use ${format(d.topDepth+d.bottomDepth)} of a ${format(p.thickness)} thickness. Reduce a chamfer size or angle to leave a contact band.`);
   if ((p.texts?.length || 0) > 6) issues.push('Use up to six text layers.');
   for (const t of p.texts || []) if (t.enabled && t.text.trim()) {
     if (t.text.length > 120) issues.push('Keep each text layer within 120 characters.');
@@ -110,42 +139,14 @@ export function profile(p) {
   return signedArea(pts)<0 ? pts.reverse() : pts;
 }
 
-export function insetPolygon(poly, distance) {
-  if (!distance) return poly.map(p=>[...p]);
-  return poly.map((p,i)=>{
-    const prev=poly[(i+poly.length-1)%poly.length], next=poly[(i+1)%poly.length];
-    const ax=p[0]-prev[0],ay=p[1]-prev[1],bx=next[0]-p[0],by=next[1]-p[1];
-    const al=Math.hypot(ax,ay),bl=Math.hypot(bx,by);
-    const na=[-ay/al,ax/al],nb=[-by/bl,bx/bl],denom=1+na[0]*nb[0]+na[1]*nb[1];
-    if(denom<1e-8) throw new Error('An edge is too sharp for this chamfer.');
-    return [p[0]+distance*(na[0]+nb[0])/denom,p[1]+distance*(na[1]+nb[1])/denom];
-  });
-}
-
-export function selfIntersects(poly) {
-  const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
-  for(let i=0;i<poly.length;i++) for(let j=i+2;j<poly.length;j++) {
-    if(i===0&&j===poly.length-1) continue;
-    const a=poly[i],b=poly[(i+1)%poly.length],c=poly[j],d=poly[(j+1)%poly.length];
-    if(Math.max(a[0],b[0])<Math.min(c[0],d[0])||Math.max(c[0],d[0])<Math.min(a[0],b[0])||Math.max(a[1],b[1])<Math.min(c[1],d[1])||Math.max(c[1],d[1])<Math.min(a[1],b[1])) continue;
-    if(cross(a,b,c)*cross(a,b,d)<-1e-12&&cross(c,d,a)*cross(c,d,b)<-1e-12) return true;
-  }
-  return false;
-}
-
-/** Watertight polygon loft, with independent 45-degree face chamfers. */
+/** Sharp, watertight prism. Chamfers are robust solid cuts in solid.mjs. */
 export function baseMesh(p) {
   const poly=profile(p), d=derive(p), q=QUALITY[p.quality]||QUALITY.standard;
-  const maxChamfer=Math.max(p.chamferTop,p.chamferBottom);
-  if(maxChamfer&&selfIntersects(insetPolygon(poly,maxChamfer))) throw new Error('Chamfer edges intersect. Reduce the chamfer size.');
-  const levels=[[0,p.chamferBottom]];
-  if(p.chamferBottom>0) levels.push([p.chamferBottom,0]);
-  if(p.thickness-p.chamferTop>levels.at(-1)[0]) levels.push([p.thickness-p.chamferTop,0]);
-  if(p.chamferTop>0) levels.push([p.thickness,p.chamferTop]);
+  const levels=[[0,0],[p.thickness,0]];
   const positions=[],triangles=[],rings=[];
   const boreSegments=Math.max(q.circleSegments,Math.ceil(Math.PI/Math.acos(Math.max(-1,1-q.tolerance/Math.max(d.bore/2,1)))));
   for(const [z,inset] of levels) {
-    const contours=[insetPolygon(poly,inset)];
+    const contours=[poly];
     if(d.bore>0) contours.push(Array.from({length:boreSegments},(_,i)=>{const a=-i*2*Math.PI/boreSegments;return [(d.bore/2+inset)*Math.cos(a),(d.bore/2+inset)*Math.sin(a)];}));
     const ring=[];
     for(const contour of contours) {
@@ -172,8 +173,10 @@ export function baseMesh(p) {
 }
 
 export function importProject(value) {
-  if (!value || value.version !== 1 || typeof value.name !== 'string') throw new Error('This is not a Gage Studio v1 project.');
-  const p={...structuredClone(DEFAULTS),...value};
+  if (!value || ![1,2].includes(value.version) || typeof value.name !== 'string') throw new Error('This is not a supported Gage Studio project.');
+  const p={...structuredClone(DEFAULTS),...value,version:2};
+  if(value.version===1){p.cageDiameter=legacyCageDiameter({...p,flatLength:value.flatLength??5.08});}
+  delete p.flatLength;
   if(!['in','mm'].includes(p.units)||!Object.keys(QUALITY).includes(p.quality)) throw new Error('Unsupported units or mesh quality.');
   if(!Array.isArray(p.texts)||p.texts.length>6) throw new Error('Invalid text layer list.');
   const enums={face:['top','bottom'],mode:['emboss','engrave'],layout:['linear','arc'],font:['sans','serif','mono','custom'],weight:['regular','bold'],align:['left','center','right']};
