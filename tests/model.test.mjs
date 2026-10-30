@@ -85,7 +85,7 @@ test('missing glyphs are reported instead of silently replacing lettering',async
   await assert.rejects(buildSolid(api,params({texts:[{...DEFAULTS.texts[0],text:'漢'}]}),async()=>font),/no .* glyph/);
 });
 test('impossible dimensions are rejected before creating a mesh',()=>{
-  for(const extra of [{rollerCount:0},{rollerCount:12.5},{betweenMax:1},{rollerDiameter:-1},{gapWidth:15},{gapLength:100},{boreDiameter:100},{chamferTop:5,chamferBottom:5},{compensation:-200}]){
+  for(const extra of [{rollerCount:0},{rollerCount:12.5},{betweenMax:1},{rollerDiameter:-1},{gapWidth:15},{gapLength:100},{boreDiameter:100},{chamferTop:5,chamferBottom:5},{compensation:-200},{compensation:1e100}]){
     const p=params(extra);assert.ok(validate(p).length);assert.throws(()=>baseMesh(p));
   }
 });

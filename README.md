@@ -67,7 +67,7 @@ The build is fully self-contained: the solid-modeling WASM, fonts, scripts, icon
 
 `.github/workflows/deploy.yml` tests and builds pushes to `main`, then publishes `dist` through GitHub Pages Actions. The repository's **Settings → Pages → Source** must be set to **GitHub Actions**. Pull requests run the tests and build without publishing. Relative asset paths support this repository's Pages subdirectory.
 
-Use a current Safari, Chrome, Edge, or Firefox with WebAssembly and WebGL2. The responsive interface supports phone touch controls: one finger orbits; two fingers pan and pinch. On desktop, right-drag or Shift-drag pans. Keys 1–4 select views; F fits the model. On iPhone use Safari → Share → Add to Home Screen; supported Android/desktop browsers expose an Install app command.
+Use a current Safari, Chrome, Edge, or Firefox with WebAssembly. WebGL2 provides the primary accelerated view; an interactive Canvas 3D fallback draws the same solid when hardware graphics are unavailable. The responsive interface supports phone touch controls: one finger orbits; two fingers pan and pinch. On desktop, right-drag or Shift-drag pans. Keys 1–4 select views; F fits the model. On iPhone use Safari → Share → Add to Home Screen; supported Android/desktop browsers expose an Install app command.
 
 Tests cover tangent midpoint/normal geometry, compensation, targets, solid manifoldness and connectivity, volume, chamfers, bores, circular and multiline lettering, bottom-face placement, invalid-input handling, missing glyphs, all export layouts, and an independent 3MF importer round-trip.
 

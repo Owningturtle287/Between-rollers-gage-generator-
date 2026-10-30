@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Model, Project, ViewSettings } from '../types';
 import { derive, localToWorld } from '../core/geometry.mjs';
+import { SoftwareViewer } from './SoftwareViewer';
 
 type SceneState={scene:THREE.Scene;camera:THREE.PerspectiveCamera;renderer:THREE.WebGLRenderer;controls:OrbitControls;part:THREE.Group;helpers:THREE.Group;grid:THREE.GridHelper;light:THREE.DirectionalLight;frame:()=>void;zoom:(factor:number)=>void;};
 const disposeGroup=(group:THREE.Group)=>{group.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.geometry)mesh.geometry.dispose();if(mesh.material)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])m.dispose();});group.clear();};
@@ -80,5 +81,5 @@ export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;pr
     s.controls.target.set(0,0,z);s.camera.position.copy(s.controls.target).addScaledVector(directions[settings.view].normalize(),radius*3.8);s.controls.update();
   },[settings.view,settings.reset]);
   useEffect(()=>{if(zoomCommand.id)state.current?.zoom(zoomCommand.factor);},[zoomCommand]);
-  return <div ref={root} className="three-canvas">{error&&<div className="webgl-error">{error}</div>}</div>;
+  return <div ref={root} className="three-canvas">{error&&<SoftwareViewer model={model} project={project} settings={settings} zoomCommand={zoomCommand}/>}</div>;
 }

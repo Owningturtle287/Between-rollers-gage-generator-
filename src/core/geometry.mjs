@@ -63,6 +63,7 @@ export function validate(p) {
   if (p.thickness > 1000 || p.betweenMax > 10000 || p.rollerDiameter > 1000) issues.push('Dimensions exceed the supported modeling range (10 m span / 1 m roller or thickness).');
   if (issues.length) return issues;
   const d = derive(p);
+  if (d.diameter > 10000 || !finite(d.pitchRadius)) issues.push('The compensated diameter exceeds the 10 m modeling range.');
   if (!finite(d.contactAngle) || d.contactAngle > rad(80)) issues.push('The gap and flat length leave too little outward support. Reduce their sizes.');
   if (d.diameter <= 0 || d.bore < 0) issues.push('Compensation makes a diameter zero or negative.');
   if (d.lower[1] <= d.floor + .05) issues.push('Increase gap length so the relief reaches below the contact flats.');
@@ -76,6 +77,7 @@ export function validate(p) {
     for (const key of ['size','depth','tracking','lineHeight','x','y','rotation','radius','angle']) if (!finite(t[key])) issues.push(`Text ${key} must be a finite number.`);
     if (t.size <= .1 || t.size > d.diameter) issues.push('Text size must be positive and smaller than the gage.');
     if (t.depth <= 0 || (t.mode === 'engrave' && t.depth >= p.thickness / 2)) issues.push('Text depth must be positive; engraving must be less than half the thickness.');
+    if (t.depth > 1000 || Math.abs(t.x) > d.diameter * 2 || Math.abs(t.y) > d.diameter * 2 || t.radius > d.diameter * 2 || Math.abs(t.tracking) > t.size * 2) issues.push('Text depth, position, radius, or spacing exceeds the modeling range.');
     if (t.layout === 'arc' && (t.radius <= t.size || t.text.includes('\n'))) issues.push('Circular text needs a radius larger than its size and a single line.');
     if (t.lineHeight < .5 || t.lineHeight > 4) issues.push('Text line spacing must be between 0.5 and 4.');
   }

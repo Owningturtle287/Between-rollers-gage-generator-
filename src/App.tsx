@@ -16,7 +16,7 @@ const download=(data:Uint8Array|string,name:string,mime:string)=>{
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
   const ref=useRef<HTMLDialogElement>(null);
   useEffect(()=>{ref.current?.showModal();},[]);
-  return <dialog ref={ref} className="modal" aria-label={title} onCancel={onClose} onClick={e=>{if(e.target===ref.current)onClose();}}>
+  return <dialog ref={ref} className="modal" aria-label={title} onCancel={onClose} onClick={e=>{if(e.target===ref.current){const r=ref.current!.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}>
     <div className="modal-heading"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><Icon name="close"/></button></div>{children}
   </dialog>;
 }
