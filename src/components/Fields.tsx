@@ -15,7 +15,7 @@ export function Field({label,value,onChange,units='mm',dimension=true,help,step,
     <span className="field-label">{label}{help&&<span className="tip" title={help} aria-label={help}><Icon name="info" size={12}/></span>}</span>
     <span className="input-wrap"><input ref={input} id={id} type="text" inputMode="none" readOnly role="spinbutton" value={active?pad.session!.draft:display} disabled={disabled}
       aria-valuenow={Number(display)} aria-valuemin={min} aria-valuemax={max} aria-label={label} aria-haspopup="dialog" aria-expanded={active} aria-describedby={help?id+'-help':undefined}
-      onFocus={open} onClick={open} onBlur={e=>{if(!(e.relatedTarget as Element|null)?.closest('.number-pad'))pad.close(id);}} onKeyDown={e=>{
+      onFocus={open} onClick={open} onKeyDown={e=>{
         const key=/^\d$/.test(e.key)?e.key:e.key==='.'||e.key===','?'decimal':e.key==='-'||e.key==='+'?'sign':e.key==='Backspace'?'backspace':e.key==='Delete'?'clear':e.key==='Enter'?'done':null;
         if(key){e.preventDefault();pad.press(key);}
       }}/><span className="input-unit">{units}</span></span>

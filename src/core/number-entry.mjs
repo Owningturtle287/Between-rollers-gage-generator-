@@ -13,3 +13,10 @@ export function draftValue(draft){
   if(!/^-?(?:\d+\.?\d*|\.\d+)$/.test(draft))return null;
   const value=Number(draft);return Number.isFinite(value)?value:null;
 }
+
+/** Pointer presses are immediate; the subsequent compatibility click is not a second digit. */
+export function activatesPadKey({type,button=0,detail=0,pointerType=''}){
+  if(type==='pointerdown')return button===0;
+  // Keyboard and assistive technologies activate buttons with a pointer-free click.
+  return type==='click'&&detail===0&&!pointerType;
+}

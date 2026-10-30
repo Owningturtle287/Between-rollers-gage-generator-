@@ -78,16 +78,18 @@ body{position:fixed;inset:0}
 
 .input-wrap input[readonly]{cursor:pointer;caret-color:transparent}
 .input-wrap input[aria-expanded=true]{outline:2px solid #82afa7;outline-offset:1px;background:#f9fcf6}
-.number-pad{position:fixed;z-index:80;visibility:hidden;padding:8px;border:1px solid #bacfbd;border-radius:9px;background:#fffffc;box-shadow:0 7px 24px #173c4026;touch-action:manipulation}
+.panel-scroll.number-pad-open{overflow-anchor:none}
+.number-pad{position:fixed;z-index:80;visibility:hidden;padding:9px;border:1px solid #bacfbd;border-radius:10px;background:#fffffc;box-shadow:0 7px 24px #173c4026;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .number-pad.placed{visibility:visible;animation:number-pad-enter .16s cubic-bezier(.2,.7,.3,1)}
-.number-pad.above{transform-origin:bottom center}.number-pad-heading{display:flex;align-items:center;gap:7px;height:20px;margin-bottom:6px;color:#5a7763;font-size:10px;line-height:1}
-.number-pad-heading>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.number-pad-heading small{font-size:9px;color:#92a18b;margin-left:auto}
-.number-pad-heading button{border:0;background:none;color:#8b9d82;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0}
-.number-pad-keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
-.number-pad-keys button{height:34px;min-width:0;border:1px solid #dce6d4;background:#f5f8f0;border-radius:5px;font-size:17px;font-weight:500;color:#385945;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-.number-pad-keys button:hover{background:#e7efdf}.number-pad-keys button:active{background:#d9e7cd;transform:scale(.96)}
-.number-pad-keys .pad-done{grid-column:span 2;background:#1f4d49;color:#fff;border-color:#1f4d49;font-size:12px}
+.number-pad.above{transform-origin:bottom center}.number-pad-heading{display:flex;align-items:center;gap:6px;height:26px;margin-bottom:7px;color:#5a7763;font-size:11px;line-height:1}
+.number-pad-heading>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.number-pad-heading output{max-width:45%;overflow:hidden;text-overflow:ellipsis;font-size:16px;font-variant-numeric:tabular-nums;color:#274e43;white-space:nowrap}.number-pad-heading small{font-size:10px;color:#82947b}
+.number-pad-heading button{flex-shrink:0;border:0;background:none;color:#718b67;width:26px;height:26px;display:flex;align-items:center;justify-content:center;padding:0}
+.number-pad-keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.number-pad-keys button{height:44px;min-width:0;padding:0;border:1px solid #dce6d4;background:#f5f8f0;border-radius:6px;font-size:20px;font-weight:500;color:#385945;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+@media(hover:hover){.number-pad-keys button:hover{background:#e7efdf}}
+.number-pad-keys button:active{background:#d9e7cd;border-color:#7eaa8b;box-shadow:inset 0 0 0 1px #7eaa8b}
+.number-pad-keys .pad-done{grid-column:span 2;background:#1f4d49;color:#fff;border-color:#1f4d49;font-size:14px}
 .number-pad-keys .pad-done:hover{background:#2c645c}
-@keyframes number-pad-enter{from{opacity:0;transform:translateY(-5px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-@media(orientation:landscape) and (max-height:600px){.number-pad{padding:6px}.number-pad-keys button{height:30px}.number-pad-heading{height:17px;margin-bottom:4px}}
+@keyframes number-pad-enter{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@media(orientation:landscape) and (max-height:600px){.number-pad{padding:8px}.number-pad-keys{gap:6px}.number-pad-keys button{height:40px;font-size:19px}.number-pad-heading{height:24px;margin-bottom:5px}}
 @media(prefers-reduced-motion:reduce){.number-pad.placed{animation:none}}
