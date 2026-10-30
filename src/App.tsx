@@ -74,7 +74,7 @@ export default function App(){
   },[]);
   useEffect(()=>{
     const handler=(e:KeyboardEvent)=>{
-      if((e.target as HTMLElement)?.closest('input,textarea,select,dialog'))return;
+      if((e.target as HTMLElement)?.closest('input,textarea,select,dialog,[role=dialog]'))return;
       if(e.key.toLowerCase()==='f')setSettings(s=>({...s,reset:s.reset+1}));
       if(['1','2','3','4'].includes(e.key))setSettings(s=>({...s,view:({1:'iso',2:'top',3:'bottom',4:'front'} as const)[e.key as '1'],reset:s.reset+1}));
     };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
