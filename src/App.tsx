@@ -93,7 +93,7 @@ export default function App(){
     }catch(e){showNotice(e instanceof Error?e.message:'Font could not be loaded.');}
   };
   const newProject=()=>{undo.current=p;setHasUndo(true);setP(cloneDefaults());setSelectedText('label-1');setTab('geometry');showNotice('Started a new gage.');};
-  const addText=()=>{if(p.texts.length>=6)return;const id=crypto.randomUUID();const next={...structuredClone(DEFAULTS.texts[0]),id,text:'YOUR TEXT',layout:'linear',y:0,radius:d.diameter*.3} as TextLayer;setP(prev=>({...prev,texts:[...prev.texts,next]}));setSelectedText(id);};
+  const addText=()=>{if(p.texts.length>=6)return;const id=crypto.randomUUID();const web=Number.isFinite(d.web)?Math.max(1,d.web):25;const bore=Number.isFinite(d.bore)?d.bore:0;const next={...structuredClone(DEFAULTS.texts[0]),id,text:'YOUR TEXT',layout:'linear',size:Math.min(4.4,web*.18),y:-(bore/2+web*.45),radius:d.diameter*.3} as TextLayer;setP(prev=>({...prev,texts:[...prev.texts,next]}));setSelectedText(id);};
   const exportFile=async(share=false)=>{
     if(!ready||!model)return;setExporting(true);
     try{

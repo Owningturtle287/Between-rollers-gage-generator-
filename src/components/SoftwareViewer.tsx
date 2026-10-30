@@ -41,7 +41,10 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
         if(area>=-.0001&&!s.wireframe)continue;
         const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2],vx=pos[c]-pos[a],vy=pos[c+1]-pos[a+1],vz=pos[c+2]-pos[a+2];
         const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,len=Math.hypot(nx,ny,nz)||1;
-        const shade=.62+.35*Math.max(0,(-.35*nx-.25*ny+.902*nz)/len);
+        let shade=.62+.35*Math.max(0,(-.35*nx-.25*ny+.902*nz)/len);
+        const avgZ=(pos[a+2]+pos[b+2]+pos[c+2])/3;
+        const textFace=(nz/len>.95&&Math.abs(avgZ-model.zOffset-p.thickness)>.001)||(nz/len<-.95&&Math.abs(avgZ-model.zOffset)>.001);
+        if(textFace)shade*=.78;
         faces.push({a,b,c,depth:(points[a+2]+points[b+2]+points[c+2])/3,shade});
       }
       faces.sort((a,b)=>a.depth-b.depth);
