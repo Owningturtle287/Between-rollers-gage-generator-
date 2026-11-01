@@ -92,7 +92,7 @@ export function validate(p) {
   if (p.gapWidth >= p.rollerDiameter) issues.push('Gap width must be smaller than the roller diameter.');
   if (p.boreEnabled && p.boreDiameter <= 0) issues.push('Bore diameter must be greater than zero.');
   if ([c.top,c.bottom,c.boreTop,c.boreBottom].some(v=>v<0)) issues.push('Chamfer sizes cannot be negative.');
-  if([c.topAngle,c.bottomAngle,c.boreTopAngle,c.boreBottomAngle].some(v=>v<1||v>89))issues.push('Chamfer angles must be between 1° and 89°, measured from the flat face.');
+  if([[c.top,c.topAngle],[c.bottom,c.bottomAngle],[c.boreTop,c.boreTopAngle],[c.boreBottom,c.boreBottomAngle]].some(([width,angle])=>angle<0||angle>89||(width>0&&angle<1)))issues.push('A nonzero chamfer needs an angle between 1° and 89°, measured from the flat face.');
   if (p.thickness > 1000 || p.betweenMax > 10000 || p.cageDiameter>10000 || p.rollerDiameter > 1000) issues.push('Dimensions exceed the supported modeling range (10 m span / 1 m roller or thickness).');
   if(p.color&&!/^#[0-9a-f]{6}$/i.test(p.color))issues.push('Choose a valid six-digit gage color.');
   if (issues.length) return issues;
@@ -180,7 +180,7 @@ export function baseMesh(p) {
   return {positions:new Float32Array(positions),indices:new Uint32Array(triangles),outline:poly,derived:d};
 }
 
-export function importProject(value) {
+export function importProject(value,{allowIncomplete=false}={}) {
   if (!value || ![1,2,3].includes(value.version) || typeof value.name !== 'string') throw new Error('This is not a supported Gage Studio project.');
   const p={...structuredClone(DEFAULTS),...value,version:3};
   if(value.version===1){p.cageDiameter=legacyCageDiameter({...p,flatLength:value.flatLength??5.08});}
@@ -195,7 +195,17 @@ export function importProject(value) {
   if(!Array.isArray(p.texts)||p.texts.length>6) throw new Error('Invalid text layer list.');
   const enums={face:['top','bottom'],mode:['emboss','engrave'],layout:['linear','arc'],font:['sans','serif','mono','custom'],weight:['regular','bold'],align:['left','center','right']};
   p.texts=p.texts.map((t,i)=>{if(typeof t?.text!=='string')throw new Error('Invalid text layer.');const out={...DEFAULTS.texts[0],...t,id:`label-${Date.now()}-${i}`};for(const key in enums)if(!enums[key].includes(out[key]))throw new Error(`Invalid text ${key}.`);return out;});
+  // Incomplete dimensions are a valid editable draft. Malformed values still are not.
+  for(const [key,initial] of Object.entries(DEFAULTS)){
+    if(typeof initial==='number'&&!finite(p[key]))throw new Error('Invalid numeric project value.');
+    if(typeof initial==='boolean'&&typeof p[key]!=='boolean')throw new Error('Invalid project option.');
+  }
+  for(const t of p.texts)for(const [key,initial] of Object.entries(DEFAULTS.texts[0])){
+    if(typeof initial==='number'&&!finite(t[key]))throw new Error('Invalid numeric text value.');
+    if(typeof initial==='boolean'&&typeof t[key]!=='boolean')throw new Error('Invalid text option.');
+  }
+  if(!/^#[0-9a-f]{6}$/i.test(p.color))throw new Error('Invalid gage color.');
   if(p.customFont && (typeof p.customFont!=='string'||p.customFont.length>2800000||!/^[A-Za-z0-9+/=]+$/.test(p.customFont))) throw new Error('Invalid custom font data.');
-  const issues=validate(p);if(issues.length)throw new Error(issues.join(' '));
+  const issues=validate(p);if(issues.length&&!allowIncomplete)throw new Error(issues.join(' '));
   return p;
 }

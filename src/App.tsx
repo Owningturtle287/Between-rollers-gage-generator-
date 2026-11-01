@@ -7,10 +7,12 @@ import { Icon } from './components/Icon';
 import type { Model, Project, TextLayer, ViewSettings } from './types';
 import { formatDimension } from './core/units.mjs';
 import { changeChamfer, linkChamfers } from './core/chamfer-settings.mjs';
+import { clearProject, isBlankProject } from './core/clear-project.mjs';
+import { MysteryCylinder } from './components/MysteryCylinder';
 
 const STORAGE='between-rollers-project-v1';
 const cloneDefaults=()=>structuredClone(DEFAULTS) as Project;
-const getInitial=()=>{try{const raw=localStorage.getItem(STORAGE);return raw?importProject(JSON.parse(raw)) as Project:cloneDefaults();}catch{return cloneDefaults();}};
+const getInitial=()=>{try{const raw=localStorage.getItem(STORAGE);return raw?importProject(JSON.parse(raw),{allowIncomplete:true}) as Project:cloneDefaults();}catch{return cloneDefaults();}};
 const download=(data:Uint8Array|string,name:string,mime:string)=>{
   const blob=new Blob([typeof data==='string'?data:new Uint8Array(data).buffer],{type:mime});
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
@@ -34,7 +36,7 @@ function ChamferControls({project:p,area,onChange}:{project:Project;area:'outer'
     <div className="field-grid">{(['Top','Bottom'] as const).map(face=><div className="chamfer-face" key={face}>
       <Field label={`${name} ${face.toLowerCase()} chamfer`} value={p[(prefix+face) as keyof Project] as number} units={p.units} disabled={disabled}
         onChange={v=>onChange(prev=>changeChamfer(prev,area,face,'size',v) as Project)}/>
-      <Field label={`${name} ${face.toLowerCase()} angle`} value={p[(prefix+face+'Angle') as keyof Project] as number} units="deg" dimension={false} min={1} max={89} disabled={disabled}
+      <Field label={`${name} ${face.toLowerCase()} angle`} value={p[(prefix+face+'Angle') as keyof Project] as number} units="deg" dimension={false} min={0} max={89} disabled={disabled}
         onChange={v=>onChange(prev=>changeChamfer(prev,area,face,'angle',v) as Project)}/>
     </div>)}</div>
     {disabled&&<p className="fine-note">Enable the center bore to apply bore chamfers.</p>}
@@ -57,6 +59,10 @@ export default function App(){
   const issues=validate(p),d=derive(p),error=buildError.signature===signature?buildError.message:'';
   const building=model?.signature!==signature&&!issues.length&&!error;
   const ready=!!model&&model.signature===signature&&!issues.length&&!error;
+  const invalid=issues.length>0||!!error,blank=isBlankProject(p);
+  const [unresolved,setUnresolved]=useState(true);
+  const showMystery=invalid||unresolved||!model;
+  useEffect(()=>{if(invalid)setUnresolved(true);else if(ready)setUnresolved(false);},[invalid,ready]);
   const units=p.units;
   const fmt=(n:number)=>formatDimension(n,units);
   const update=(key:keyof Project,value:unknown)=>setP(prev=>({...prev,[key]:value}));
@@ -99,7 +105,7 @@ export default function App(){
 
   const saveProject=()=>{download(JSON.stringify(p,null,2),safeName(p.name)+'.gage.json','application/json');showNotice('Project file saved. Open it here to restore every setting.');};
   const openProject=async(file:File)=>{
-    try{if(file.size>3500000)throw new Error('Project files must be smaller than 3.5 MB.');const next=importProject(JSON.parse(await file.text())) as Project;
+    try{if(file.size>3500000)throw new Error('Project files must be smaller than 3.5 MB.');const next=importProject(JSON.parse(await file.text()),{allowIncomplete:true}) as Project;
       undo.current=p;setHasUndo(true);setP(next);setSelectedText(next.texts[0]?.id||'');showNotice('Project opened.');
     }catch(e){showNotice(e instanceof Error?e.message:'Could not open project.');}
   };
@@ -110,6 +116,7 @@ export default function App(){
     }catch(e){showNotice(e instanceof Error?e.message:'Font could not be loaded.');}
   };
   const newProject=()=>{undo.current=p;setHasUndo(true);setP(cloneDefaults());setSelectedText('label-1');setTab('geometry');showNotice('Started a new gage.');};
+  const clearAll=()=>{const next=clearProject(p) as Project;if(JSON.stringify(next)===JSON.stringify(p))return;undo.current=p;setHasUndo(true);setP(next);setSelectedText(next.texts[0].id);showNotice('All settings cleared.');};
   const addText=()=>{if(p.texts.length>=6)return;const id=crypto.randomUUID();const web=Number.isFinite(d.web)?Math.max(1,d.web):25;const bore=Number.isFinite(d.bore)?d.bore:0;const next={...structuredClone(DEFAULTS.texts[0]),id,text:'YOUR TEXT',layout:'linear',size:Math.min(4.4,web*.18),y:-(bore/2+web*.45),radius:d.diameter*.3} as TextLayer;setP(prev=>({...prev,texts:[...prev.texts,next]}));setSelectedText(id);};
   const exportFile=async(share=false)=>{
     if(!ready||!model)return;setExporting(true);
@@ -143,12 +150,13 @@ export default function App(){
     </header>
     <main className="app-body">
       <aside className="sidebar" aria-label="Gage parameters">
-        <nav className="tabs" aria-label="Parameter groups">{([{id:'geometry',label:'Geometry',icon:'sliders'},{id:'text',label:'Lettering',icon:'type'},{id:'print',label:'Print setup',icon:'print'}] as const).map(t=><button key={t.id} className={tab===t.id?'active':''} aria-pressed={tab===t.id} onClick={()=>setTab(t.id)}><Icon name={t.icon} size={16}/>{t.label}</button>)}<div className="unit-switch" aria-label="Display units">{(['in','mm'] as const).map(u=><button key={u} className={units===u?'selected':''} aria-pressed={units===u} onClick={()=>update('units',u)}>{u}</button>)}</div></nav>
+        <nav className="tabs" aria-label="Parameter groups">{([{id:'geometry',label:'Geometry'},{id:'text',label:'Lettering'},{id:'print',label:'Print'}] as const).map(t=><button key={t.id} className={`parameter-tab ${tab===t.id?'active':''}`} aria-label={t.id==='print'?'Print setup':t.label} aria-pressed={tab===t.id} onClick={()=>setTab(t.id)}>{t.label}</button>)}<div className="unit-switch" aria-label="Display units">{(['in','mm'] as const).map(u=><button key={u} className={units===u?'selected':''} aria-pressed={units===u} onClick={()=>update('units',u)}>{u}</button>)}</div><button className="clear-all" onClick={clearAll} title="Zero all editable values and clear lettering across every tab">Clear all</button></nav>
         <div className="panel-scroll">
+          {invalid&&<div className="settings-feedback" role="status"><Icon name={blank?'sliders':'info'} size={16}/><div><strong>{blank?'Start with your dimensions':'Check these values'}</strong>{blank?<p>Enter roller count, roller size, and gage dimensions to reveal your model.</p>:(issues.length?issues:[error]).map((msg:string)=><p key={msg}>{msg}</p>)}</div></div>}
           {tab==='geometry'&&<>
             <Section number="01" title="Roller arrangement">
               <div className="field-grid"><Field label="Roller count" value={p.rollerCount} onChange={v=>update('rollerCount',v)} dimension={false} units="" min={3} max={80}/><Field label="Roller diameter" value={p.rollerDiameter} onChange={v=>update('rollerDiameter',v)} units={units} help="The actual diameter of one roller. This is required to calculate tangent seating faces."/></div>
-              <div className="subtle-note"><span className="mini-dot"/>Evenly spaced at {(360/p.rollerCount).toFixed(2)}° · exact tangent contacts</div>
+              <div className="subtle-note"><span className="mini-dot"/>{p.rollerCount>=3?`Evenly spaced at ${(360/p.rollerCount).toFixed(2)}° · exact tangent contacts`:'Enter the total roller count'}</div>
             </Section>
             <Section number="02" title="Between-roller diameter">
               <p className="section-description">The circle through the rollers’ inward-facing apexes.</p>
@@ -160,13 +168,23 @@ export default function App(){
               <Field label="Gage thickness" value={p.thickness} onChange={v=>update('thickness',v)} units={units}/>
               <div className="field-grid"><Field label="Space gap width" value={p.gapWidth} onChange={v=>update('gapWidth',v)} units={units} help="Width between the parallel relief walls, below the two tangent contact flats."/><Field label="Space gap length" value={p.gapLength} onChange={v=>update('gapLength',v)} units={units} help="Radial distance from the inward roller apex to the bottom of the relief slot."/></div>
               <Field label="Cage Clearance Diameter" value={p.cageDiameter} onChange={v=>update('cageDiameter',v)} units={units} help="The very outside diameter of the gage before printing compensation. Contact flats auto-size and remain tangent at their midpoints."/>
-              <div className="contact-callout"><Icon name="check" size={15}/><span>Auto flat length: <strong>{fmt(d.flatLength)} {units}</strong> · {(d.contactAngle*180/Math.PI).toFixed(1)}°</span></div>
+              <div className="contact-callout"><Icon name="check" size={15}/><span>Auto flat length: <strong>{fmt(d.flatLength)} {units}</strong> · {Number.isFinite(d.contactAngle)?(d.contactAngle*180/Math.PI).toFixed(1):'—'}°</span></div>
             </Section>
             <Section number="04" title="Center bore">
               <Toggle label="Add a through bore" checked={p.boreEnabled} onChange={v=>update('boreEnabled',v)}/>
               {p.boreEnabled&&<Field label="Bore diameter" value={p.boreDiameter} onChange={v=>update('boreDiameter',v)} units={units}/>}
             </Section>
-            <div className="panel-link"><Icon name="print" size={16}/><button onClick={()=>setTab('print')}>Set compensation & chamfers</button><Icon name="arrow" size={16}/></div>
+            <Section number="05" title="Outside diameter chamfers">
+              <p className="section-description">Chamfer the outside profile and probe reliefs. Size is the setback along the flat face; angle is measured from that face. Zero leaves a sharp edge.</p>
+              <ChamferControls project={p} area="outer" onChange={setP}/>
+              <div className="subtle-note">Full contact height: {fmt(d.contactHeight)} {units}</div>
+            </Section>
+            <Section number="06" title="Bore chamfers">
+              <p className="section-description">Set the bore edges independently of the outside diameter.</p>
+              <ChamferControls project={p} area="bore" onChange={setP}/>
+              {p.boreEnabled&&<div className="subtle-note">Straight bore height: {fmt(d.boreContactHeight)} {units}</div>}
+            </Section>
+            <div className="panel-link"><Icon name="print" size={16}/><button onClick={()=>setTab('print')}>Open print settings</button><Icon name="arrow" size={16}/></div>
           </>}
           {tab==='text'&&<>
             <div className="text-intro"><div><h3>Text layers</h3><p>Real embossed or engraved geometry.</p></div><button className="small-button" disabled={p.texts.length>=6} onClick={addText}><Icon name="plus" size={14}/>Add text</button></div>
@@ -203,21 +221,11 @@ export default function App(){
               <p className="fine-note">If a measured diameter prints 0.010 in small, enter <strong>+0.010 in</strong>. Each side moves 0.005 in. Roller size, gap dimensions, lettering, and thickness stay nominal.</p>
               <Toggle label="Also compensate bore diameter" checked={p.compensateBore} onChange={v=>update('compensateBore',v)} description={p.boreEnabled?`Modeled bore Ø ${fmt(d.bore)} ${units}`:'Applies when the center bore is enabled'}/>
             </Section>
-            <Section number="02" title="Outside diameter chamfers">
-              <p className="section-description">Chamfer the outside profile and probe reliefs. Size is the setback along the flat face; angle is measured from that face. Zero leaves a sharp edge.</p>
-              <ChamferControls project={p} area="outer" onChange={setP}/>
-              <div className="subtle-note">Full contact height: {fmt(d.contactHeight)} {units}</div>
-            </Section>
-            <Section number="03" title="Bore chamfers">
-              <p className="section-description">Set the bore edges independently of the outside diameter.</p>
-              <ChamferControls project={p} area="bore" onChange={setP}/>
-              {p.boreEnabled&&<div className="subtle-note">Straight bore height: {fmt(d.boreContactHeight)} {units}</div>}
-            </Section>
-            <Section number="04" title="Mesh quality">
+            <Section number="02" title="Mesh quality">
               <Select label="Curve resolution" value={p.quality} onChange={v=>update('quality',v)} options={Object.entries(QUALITY).map(([value,q])=>({value,label:`${({draft:'Draft',standard:'Standard',fine:'Fine',ultra:'Ultra fine'} as Record<string,string>)[value]} · ${fmt(q.tolerance)} ${units} chord tolerance`}))}/>
               <p className="fine-note">Resolution controls curve smoothness. It does not change the entered chamfer size or angle.</p>
             </Section>
-            <Section number="05" title="Desktop & phone">
+            <Section number="03" title="Desktop & phone">
               <p className="section-description">Install Gage Studio for a dedicated window and home-screen icon. The app works offline after its first complete load.</p>
               {installEvent?<button className="small-button full-width" onClick={async()=>{await installEvent.prompt();setInstallEvent(null);}}><Icon name="install" size={16}/>Install Gage Studio</button>:<p className="fine-note">iPhone: Safari → Share → Add to Home Screen.<br/>Android / desktop: use your browser’s Install app command.</p>}
               <button className="small-button full-width" onClick={saveProject}><Icon name="save" size={15}/>Save a portable project</button>
@@ -228,11 +236,11 @@ export default function App(){
       </aside>
       <section className="workspace" aria-label="3D design workspace" aria-busy={building}>
         <output className="sr-only" role="status">{ready?'Model ready':building?'Updating model':'Review model settings'}</output>
-        <Viewer model={model} project={renderedProject} settings={{...settings,material:p.color}} zoomCommand={zoom}/>
+        <div className={`gage-preview ${showMystery?'concealed':''}`} aria-hidden={showMystery}><Viewer model={model} project={renderedProject} settings={{...settings,material:p.color}} zoomCommand={zoom} active={!showMystery}/></div>
+        {showMystery&&<MysteryCylinder color={p.color}/>}
         <div className="viewport-tools"><div className="tool-group view-presets" role="group" aria-label="Model orientation">{viewButton('iso','Iso','1')}{viewButton('top','Top','2')}{viewButton('bottom','Bottom','3')}{viewButton('front','Front','4')}</div><div className="tool-group"><button className="tool-button" aria-label="Zoom in" title="Zoom in" onClick={()=>setZoom(z=>({id:z.id+1,factor:.82}))}><Icon name="plus"/></button><button className="tool-button" aria-label="Zoom out" title="Zoom out" onClick={()=>setZoom(z=>({id:z.id+1,factor:1.22}))}><Icon name="minus"/></button><button className="tool-button" aria-label="Fit model" title="Fit model · F" onClick={()=>setSettings(s=>({...s,reset:s.reset+1}))}><Icon name="frame"/></button></div></div>
         <div className="display-tools" aria-label="Preview options"><div className="roller-modes" role="group" aria-label="Roller appearance"><span className="roller-label">Rollers</span>{([{mode:'metal',icon:'roller',label:'Metal'},{mode:'clear',icon:'roller-clear',label:'See-through'},{mode:'off',icon:'roller-off',label:'Off'}] as const).map(t=><button key={t.mode} className={`roller-mode ${settings.rollerMode===t.mode?'active':''}`} aria-label={`${t.label} rollers`} title={`${t.label} rollers`} aria-pressed={settings.rollerMode===t.mode} onClick={()=>updateView('rollerMode',t.mode)}><Icon name={t.icon} size={16}/><span>{t.label}</span></button>)}</div><span className="tool-separator"/>{([{key:'grid',icon:'grid',title:'Grid'},{key:'wireframe',icon:'wire',title:'Wireframe'}] as const).map(t=><button key={t.key} className={`tool-button ${settings[t.key]?'active':''}`} aria-label={t.title} title={t.title} aria-pressed={settings[t.key]} onClick={()=>updateView(t.key,!settings[t.key])}><Icon name={t.icon}/></button>)}<label className="color-control" title="Gage color"><span className="sr-only">Gage color</span><input type="color" aria-label="Gage color" value={p.color} onChange={e=>update('color',e.target.value)}/></label></div>
-        {(issues.length>0||error)&&<div className="validation-banner" role="alert"><Icon name="warning" size={18}/><div><strong>Adjust the model to continue</strong>{(issues.length?issues:[error]).map((msg:string)=><p key={msg}>{msg}</p>)}{model&&<small>Showing the previous valid model. Export is paused.</small>}</div></div>}
-        {building&&<div className="building-pill"><span className="spinner"/>{model?'Updating geometry':'Preparing your workspace'}</div>}
+        {building&&!showMystery&&<div className="building-pill"><span className="spinner"/>Updating geometry</div>}
       </section>
     </main>
     {notice&&<div className="toast" role="status"><Icon name="info" size={17}/><span>{notice}</span>{hasUndo&&<button onClick={()=>{if(undo.current){setP(undo.current);setSelectedText(undo.current.texts[0]?.id||'');setHasUndo(false);setNotice('Previous project restored.');}}}>Undo</button>}<button className="icon-button" aria-label="Dismiss notification" onClick={()=>setNotice('')}><Icon name="close" size={15}/></button></div>}

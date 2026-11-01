@@ -11,9 +11,10 @@ import { SoftwareViewer } from './SoftwareViewer';
 
 type SceneState={scene:THREE.Scene;camera:THREE.PerspectiveCamera;renderer:THREE.WebGLRenderer;controls:OrbitControls;part:THREE.Group;helpers:THREE.Group;ground:ReturnType<typeof createPreviewGround>;configure:(project:Project,model:Model)=>void;light:THREE.DirectionalLight;frame:()=>void;zoom:(factor:number)=>void;};
 const disposeGroup=(group:THREE.Group)=>{group.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.geometry)mesh.geometry.dispose();if(mesh.material)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])m.dispose();});group.clear();};
-export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;project:Project;settings:ViewSettings;zoomCommand:{id:number;factor:number}}){
+export function Viewer({model,project,settings,zoomCommand,active=true}:{model:Model|null;project:Project;settings:ViewSettings;zoomCommand:{id:number;factor:number};active?:boolean}){
   const root=useRef<HTMLDivElement>(null),state=useRef<SceneState|null>(null),first=useRef(true);
   const projectRef=useRef(project);projectRef.current=project;
+  const activeRef=useRef(active);activeRef.current=active;
   const [error,setError]=useState('');
   useEffect(()=>{
     const el=root.current!;let renderer:THREE.WebGLRenderer;
@@ -43,7 +44,7 @@ export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;pr
     };
     state.current={scene,camera,renderer,controls,part,helpers,ground,configure,light:key,frame,zoom:(factor)=>{camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target);controls.update();}};
     const resize=new ResizeObserver(()=>{const {width,height}=el.getBoundingClientRect();if(width&&height){renderer.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix();}});resize.observe(el);
-    let raf=0;const render=()=>{raf=requestAnimationFrame(render);if(!document.hidden){controls.update();
+    let raf=0;const render=()=>{raf=requestAnimationFrame(render);if(!document.hidden&&activeRef.current){controls.update();
       camera.getWorldDirection(viewDirection);
       const {near,far}=previewDepthRange(toCenter.copy(sceneCenter).sub(camera.position).dot(viewDirection),sceneRadius);
       if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
