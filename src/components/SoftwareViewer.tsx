@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { CylinderGeometry } from 'three';
 import type { Model, Project, ViewSettings } from '../types';
 import { derive, localToWorld } from '../core/geometry.mjs';
+import { convexHull2D, previewLayout } from '../core/preview-layout.mjs';
 
 /** Canvas painter fallback. Uses the actual solid mesh, never a placeholder. */
 export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model|null;project:Project;settings:ViewSettings;zoomCommand:{id:number;factor:number}}){
@@ -19,7 +20,7 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
       const {width,height}=el.getBoundingClientRect(),ratio=Math.min(window.devicePixelRatio||1,2);
       if(el.width!==Math.round(width*ratio)||el.height!==Math.round(height*ratio)){el.width=Math.round(width*ratio);el.height=Math.round(height*ratio);}
       ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,width,height);
-      const d=derive(p),v=pose.current;
+      const d=derive(p),v=pose.current,layout=previewLayout(p,model.zOffset);
       referenceRadius.current??=d.pitchRadius+d.rollerRadius;
       const scale=Math.min(width*.41,height*.37)/referenceRadius.current*v.zoom;
       const cx=width*.52+v.panX,cy=height*.52+v.panY;
@@ -29,17 +30,18 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
         return [cx+xx*scale,cy-(yy*sp+zz*cp)*scale,-yy*cp+zz*sp];
       };
       // A soft grounding shadow gives shape and thickness a stable reference.
-      const ground=project(0,0,0),rx=d.tipRadius*scale,ry=Math.max(.05,Math.abs(sp))*rx;
+      const ground=project(0,0,layout.groundZ),rx=d.tipRadius*scale,ry=Math.max(.05,Math.abs(sp))*rx;
       ctx.save();ctx.translate(ground[0],ground[1]+8);ctx.scale(1,Math.max(.13,ry/rx));
       const shadow=ctx.createRadialGradient(0,0,rx*.35,0,0,rx*1.16);shadow.addColorStop(0,'#274d3a19');shadow.addColorStop(.65,'#274d3a0b');shadow.addColorStop(1,'#274d3a00');ctx.fillStyle=shadow;ctx.fillRect(-rx*1.2,-rx*1.2,rx*2.4,rx*2.4);ctx.restore();
       if(s.grid){
-        ctx.strokeStyle='#a8bba125';ctx.lineWidth=.65;
-        const step=Math.pow(10,Math.floor(Math.log10(d.tipRadius)))/2,extent=d.tipRadius*1.65;
-        for(let x=-Math.ceil(extent/step)*step;x<=extent;x+=step){for(const vertical of [false,true]){const a=vertical?project(x,-extent,-.1):project(-extent,x,-.1),b=vertical?project(x,extent,-.1):project(extent,x,-.1);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}}
+        const step=layout.gridStep,extent=d.tipRadius*1.65,facing=Math.abs(sp),pixelStep=step*scale*facing;
+        const fade=Math.min(1,Math.max(0,(facing-.035)/.125))*Math.min(1,Math.max(0,(pixelStep-3)/9));
+        ctx.strokeStyle=`rgba(130,155,144,${.17*fade})`;ctx.lineWidth=1;
+        for(let x=-Math.ceil(extent/step)*step;x<=extent;x+=step){for(const vertical of [false,true]){const a=vertical?project(x,-extent,layout.groundZ):project(-extent,x,layout.groundZ),b=vertical?project(x,extent,layout.groundZ):project(extent,x,layout.groundZ);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}}
       }
       // Sort solid rollers together with the gage rather than drawing guides over it.
       const pos=Array.from(model.positions),ix=Array.from(model.indices),partEnd=pos.length;
-      if(s.rollerMode!=='off')for(let i=0;i<p.rollerCount;i++){
+      if(s.rollerMode==='metal')for(let i=0;i<p.rollerCount;i++){
         const angle=Math.PI/2-i*Math.PI*2/p.rollerCount,[x,y]=localToWorld(0,d.pitchRadius,angle),offset=pos.length/3;
         for(let k=0;k<rollerPositions.length;k+=3)pos.push(x+rollerPositions[k]*d.rollerRadius,y+rollerPositions[k+1]*d.rollerRadius,model.zOffset+p.thickness/2+rollerPositions[k+2]*p.thickness*1.2);
         for(const index of rollerIndices)ix.push(offset+index);
@@ -70,9 +72,21 @@ export function SoftwareViewer({model,project,settings,zoomCommand}:{model:Model
         if(s.wireframe&&!roller){ctx.strokeStyle='#52776858';ctx.lineWidth=.45;ctx.stroke();}
         else{
           const steel=[178,189,201].map(x=>Math.min(255,Math.round(x*(shade*.9)+shine*100)));
-          ctx.globalAlpha=roller&&s.rollerMode==='clear'?.2:1;
           ctx.fillStyle=`rgb(${(roller?steel:rgb.map(x=>Math.round(x*shade))).join(',')})`;ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.35;ctx.stroke();ctx.globalAlpha=1;
         }
+      }
+      // Composite each ghost once. Triangle-by-triangle alpha otherwise leaves
+      // moving seams and unstable cap boundaries in the compatibility renderer.
+      if(s.rollerMode==='clear')for(let i=0;i<p.rollerCount;i++){
+        const angle=Math.PI/2-i*Math.PI*2/p.rollerCount,[x,y]=localToWorld(0,d.pitchRadius,angle);
+        const rings=[layout.rollerBottom,model.zOffset+p.thickness*1.1].map(z=>Array.from({length:64},(_,k)=>{
+          const a=k*Math.PI*2/64;return project(x+d.rollerRadius*Math.cos(a),y+d.rollerRadius*Math.sin(a),z);
+        }));
+        const hull=convexHull2D(rings.flat().map(p=>[p[0],p[1]]));
+        ctx.beginPath();hull.forEach(([xx,yy],k)=>{if(k)ctx.lineTo(xx,yy);else ctx.moveTo(xx,yy);});ctx.closePath();
+        ctx.fillStyle='rgba(120,165,187,.38)';ctx.fill();ctx.strokeStyle='rgba(64,116,143,.62)';ctx.lineWidth=1.1;ctx.stroke();
+        const cap=rings[sp>=0?1:0];ctx.beginPath();cap.forEach(([xx,yy],k)=>{if(k)ctx.lineTo(xx,yy);else ctx.moveTo(xx,yy);});ctx.closePath();
+        ctx.strokeStyle=`rgba(64,116,143,${.42*Math.min(1,Math.abs(sp)*4)})`;ctx.lineWidth=.85;ctx.stroke();
       }
     };
     const request=()=>{if(!raf)raf=requestAnimationFrame(draw);};redraw.current=request;

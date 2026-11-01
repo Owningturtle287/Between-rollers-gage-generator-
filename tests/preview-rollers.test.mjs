@@ -20,6 +20,6 @@ test('see-through rollers retain depth testing without writing transparent surfa
   const clear=createRollerPreview(DEFAULTS,0,'clear'),off=createRollerPreview(DEFAULTS,0,'off');
   try{
     assert.equal(off.children.length,0);
-    for(const mesh of clear.children){assert.equal(mesh.material.transparent,true);assert.equal(mesh.material.depthWrite,false);assert.equal(mesh.material.depthTest,true);assert.equal(mesh.material.forceSinglePass,true);assert.equal(mesh.castShadow,false);}
+    for(const mesh of clear.children){assert.equal(mesh.material.transparent,true);assert.equal(mesh.material.depthWrite,false);assert.equal(mesh.material.depthTest,true);assert.equal(mesh.material.forceSinglePass,true);assert.equal(mesh.castShadow,false);assert.ok(mesh.material.opacity>=.35&&mesh.material.opacity<.5,'ghost remains readable while exposing the gage');}
   }finally{clear.children[0].geometry.dispose();clear.children[0].material.dispose();}
 });

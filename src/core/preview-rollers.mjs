@@ -9,8 +9,8 @@ export function createRollerPreview(project,zOffset,mode){
   const geometry=new CylinderGeometry(d.rollerRadius,d.rollerRadius,project.thickness*1.2,64,1);
   geometry.rotateX(Math.PI/2);
   const material=new MeshStandardMaterial({
-    color:clear?'#9cbecb':'#c6d0da',metalness:clear?.15:.95,roughness:clear?.3:.2,envMapIntensity:1.3,
-    transparent:clear,opacity:clear?.2:1,depthWrite:!clear,depthTest:true,side:FrontSide,
+    color:clear?'#78a5bb':'#c6d0da',metalness:clear?.08:.95,roughness:clear?.4:.2,envMapIntensity:clear?.85:1.3,
+    transparent:clear,opacity:clear?.38:1,depthWrite:!clear,depthTest:true,side:FrontSide,
   });
   material.forceSinglePass=true;
   for(let i=0;i<project.rollerCount;i++){
