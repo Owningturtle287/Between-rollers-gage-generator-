@@ -15,12 +15,27 @@ body{position:fixed;inset:0}
 .tabs .unit-switch button.selected{color:#2f5244;background:#fff}
 .panel-scroll{min-height:0;height:0;flex:1;overflow-x:hidden;overflow-y:auto;padding:0 18px 12px;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;scroll-padding:14px}
 .section summary{padding:19px 0 16px}.section-body{padding-bottom:19px;gap:13px}
+.section-heading{display:flex;align-items:center;gap:10px;margin:0;padding:19px 0 16px;font-size:12px;font-weight:500;line-height:1.4;color:#294e47}
+.section-heading .section-number{font-size:9px;letter-spacing:.07em;color:#95a18c;font-weight:400}
+.chamfer-face{display:flex;flex-direction:column;gap:12px;min-width:0}
+.chamfer-link{display:flex;align-items:center;gap:9px;min-height:32px;font-size:12px;color:#476452;cursor:pointer}
+.chamfer-link input{width:17px;height:17px;margin:0;accent-color:#2d6053;flex-shrink:0}
+.chamfer-link:has(input:disabled){opacity:.5;cursor:default}
 .workspace{min-height:0;min-width:0;overflow:hidden;overscroll-behavior:none;touch-action:none}
 .three-canvas,.three-canvas canvas{overscroll-behavior:none;touch-action:none}
 .viewport-tools{left:max(12px,env(safe-area-inset-left,0px));top:12px;bottom:auto;flex-direction:row;gap:7px}
+.viewport-tools{max-width:calc(100% - 24px);flex-wrap:wrap}
+.view-presets{gap:3px}
+.view-button{height:32px;min-width:40px;padding:0 11px;border:0;border-radius:4px;background:transparent;color:#6d8174;font-size:11px;font-weight:500;line-height:1;transition:background .15s,color .15s;white-space:nowrap}
+.view-button:hover{background:#eef3e7;color:#31584c}.view-button.active{color:#244e43;background:#deead6;box-shadow:inset 0 0 0 1px #cdddc4}
+.view-button:focus-visible,.roller-mode:focus-visible{outline:2px solid #5c958a;outline-offset:1px}
 .tool-group{flex-direction:row;gap:2px;padding:4px}.tool-button{width:32px;height:32px}
 .viewport-tools>.tool-group:nth-child(2)>.tool-button{display:flex}
 .display-tools{right:12px;bottom:12px;top:auto;left:auto;gap:2px;flex-direction:row;padding:4px;align-items:center}
+.roller-modes{display:flex;align-items:center;gap:2px}.roller-label{font-size:10px;color:#718578;padding:0 5px}
+.roller-mode{display:flex;align-items:center;gap:4px;min-height:32px;padding:0 7px;border:0;border-radius:4px;color:#718578;background:transparent;font-size:10px;white-space:nowrap}
+.roller-mode.active{background:#deead6;color:#294f43;box-shadow:inset 0 0 0 1px #cdddc4}.roller-mode:hover{color:#294f43;background:#e8f0e0}
+.roller-mode svg{flex-shrink:0}
 .tool-separator{margin:0 5px}.color-control{width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .color-control input{width:30px;height:30px;padding:2px;border:0;background:none;cursor:pointer;border-radius:50%;appearance:none}
 .color-control input::-webkit-color-swatch-wrapper{padding:2px}.color-control input::-webkit-color-swatch{border:1px solid #92ab9e;border-radius:50%}.color-control input::-moz-color-swatch{border:1px solid #92ab9e;border-radius:50%}
@@ -73,6 +88,11 @@ body{position:fixed;inset:0}
 /* Prevent iOS focus zoom on every editable control, including lettering. */
 @media(pointer:coarse){input,select,textarea,.project-title input,.input-wrap input{font-size:16px!important}}
 @media(max-width:700px){input,select,textarea,.project-title input,.input-wrap input{font-size:16px!important}}
+@media(max-width:700px){
+  .viewport-tools{max-width:calc(100% - 16px)}.view-presets{gap:1px}.view-button{height:29px;min-width:32px;padding:0 7px;font-size:10px}
+  .roller-label{display:none}.roller-mode{min-height:29px;padding:0 5px;font-size:9px;gap:3px}.roller-mode svg{width:15px;height:15px}
+  .display-tools{max-width:calc(100% - 16px)}.display-tools .tool-separator{margin:0 2px}
+}
 .keyboard-open .viewport-tools,.keyboard-open .display-tools{visibility:hidden}
 @media(max-width:700px) and (orientation:portrait){.keyboard-open .workspace{flex-basis:42%;height:42%}}
 

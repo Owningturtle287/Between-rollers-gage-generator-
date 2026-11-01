@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Model, Project, ViewSettings } from '../types';
-import { derive, localToWorld } from '../core/geometry.mjs';
+import { derive } from '../core/geometry.mjs';
+import { createRollerPreview } from '../core/preview-rollers.mjs';
 import { SoftwareViewer } from './SoftwareViewer';
 
 type SceneState={scene:THREE.Scene;camera:THREE.PerspectiveCamera;renderer:THREE.WebGLRenderer;controls:OrbitControls;part:THREE.Group;helpers:THREE.Group;grid:THREE.GridHelper;light:THREE.DirectionalLight;frame:()=>void;zoom:(factor:number)=>void;};
@@ -54,27 +55,8 @@ export function Viewer({model,project,settings,zoomCommand}:{model:Model|null;pr
   },[model,settings.material,settings.wireframe]);
   useEffect(()=>{
     const s=state.current;if(!s||!model)return;disposeGroup(s.helpers);s.grid.visible=settings.grid;
-    const d=derive(project),z=(model.zOffset||0),h=project.thickness;
-    if(settings.rollers){
-      for(let i=0;i<project.rollerCount;i++){
-        const a=Math.PI/2-i*2*Math.PI/project.rollerCount,[x,y]=localToWorld(0,d.pitchRadius,a);
-        const geo=new THREE.CylinderGeometry(d.rollerRadius,d.rollerRadius,h*1.2,48,1);geo.rotateX(Math.PI/2);
-        const roller=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:'#759d9b',transparent:true,opacity:.22,metalness:.3,roughness:.35,depthWrite:false}));roller.position.set(x,y,z+h/2);s.helpers.add(roller);
-        const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo,20),new THREE.LineBasicMaterial({color:'#628c8b',transparent:true,opacity:.4}));edges.position.copy(roller.position);s.helpers.add(edges);
-        for(const sign of [-1,1]){
-          const pts=[d.lower,d.upper].map(([xx,yy])=>{const [wx,wy]=localToWorld(sign*xx,yy,a);return new THREE.Vector3(wx,wy,z+h-d.topDepth+.02);});
-          const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:'#0e8b7c'}));s.helpers.add(line);
-        }
-      }
-    }
-    if(settings.dimensions){
-      const vertices=Array.from({length:129},(_,i)=>{const a=i*Math.PI*2/128;return new THREE.Vector3(d.diameter/2*Math.cos(a),d.diameter/2*Math.sin(a),z+h+.3);});
-      const circle=new THREE.Line(new THREE.BufferGeometry().setFromPoints(vertices),new THREE.LineDashedMaterial({color:'#b6783c',dashSize:1.5,gapSize:1,opacity:.6,transparent:true}));circle.computeLineDistances();s.helpers.add(circle);
-      const points=[new THREE.Vector3(0,-d.diameter/2,z+h+.3),new THREE.Vector3(0,d.diameter/2,z+h+.3)];
-      s.helpers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:'#b6783c',opacity:.7,transparent:true})));
-      for(const sign of [-1,1])s.helpers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.7,sign*d.diameter/2,z+h+.3),new THREE.Vector3(1.7,sign*d.diameter/2,z+h+.3)]),new THREE.LineBasicMaterial({color:'#b6783c'})));
-    }
-  },[model,settings.rollers,settings.dimensions,settings.grid]);
+    s.helpers.add(createRollerPreview(project,model.zOffset||0,settings.rollerMode));
+  },[model,settings.rollerMode,settings.grid]);
   useEffect(()=>{
     const s=state.current;if(!s)return;const radius=derive(projectRef.current).tipRadius||60,z=projectRef.current.thickness/2;
     const directions={iso:new THREE.Vector3(.8,-1.25,1.15),top:new THREE.Vector3(0,-.0001,1),bottom:new THREE.Vector3(0,.0001,-1),front:new THREE.Vector3(0,-1,.0001)};

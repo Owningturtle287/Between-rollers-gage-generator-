@@ -19,13 +19,13 @@ test('a second decimal and unsupported characters cannot corrupt a number',()=>{
 test('rapid taps register once each without waiting for a compatibility click',()=>{
   for(const pointerType of ['touch','pen','mouse']){
     let draft='4',replaceAll=true,accepted=0;
-    for(const key of ['0','decimal','0','0','0','3','0','0','0']){
+    for(const key of ['0','decimal','0','0','0','3','0','0']){
       for(const event of [{type:'pointerdown',button:0,pointerType},{type:'click',detail:1,pointerType}]){
         if(!activatesPadKey(event))continue;
         draft=editNumber(draft,key,replaceAll);replaceAll=false;accepted++;
       }
     }
-    assert.equal(accepted,9);assert.equal(draft,'0.0003000');assert.equal(draftValue(draft),.0003);
+    assert.equal(accepted,8);assert.equal(draft,'0.000300');assert.equal(draftValue(draft),.0003);
   }
 });
 
@@ -46,5 +46,22 @@ test('keyboard and assistive activation work without duplicating pointer clicks'
   assert.equal([{type:'pointerdown',button:0,pointerType:'touch'},
     {type:'pointerdown',button:0,pointerType:'touch'},
     {type:'click',detail:1,pointerType:'touch'},
-    {type:'click',detail:1,pointerType:'touch'}].filter(activatesPadKey).length,2);
+    {type:'click',detail:1,pointerType:'touch'}].filter(e=>activatesPadKey(e)).length,2);
+});
+
+test('Done keeps the keypad mounted through pointer release and consumes its own click',()=>{
+  let mounted=true,dismissals=0;
+  for(const type of ['pointerdown','pointerup','click']){
+    if(type==='pointerup')assert.equal(mounted,true,'the release must still target the Done button');
+    if(activatesPadKey({type,button:0,detail:1,pointerType:'touch'},'done')){mounted=false;dismissals++;}
+  }
+  assert.equal(mounted,false);assert.equal(dismissals,1);
+  assert.equal(activatesPadKey({type:'click',detail:0},'done'),true);
+});
+
+test('dimension entry accepts six decimal places and rejects a seventh without rounding',()=>{
+  const draft=type('0',['1','decimal','1','2','3','4','5','6']);assert.equal(draft,'1.123456');
+  assert.equal(editNumber(draft,'7'),draft);assert.equal(editNumber(draft,'sign'),'-1.123456');
+  assert.equal(editNumber(editNumber(draft,'backspace'),'9'),'1.123459');
+  assert.equal(editNumber('12','decimal',false,0),'12');assert.equal(editNumber('45.123','4',false,3),'45.123');
 });

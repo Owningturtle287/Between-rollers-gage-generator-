@@ -16,10 +16,14 @@ function surfaceError(positions,indices,p){
   const check=(x,y,z)=>{
     let squared=Infinity;
     for(const e of edges){const xx=x-e.x,yy=y-e.y,t=Math.max(0,Math.min(1,(xx*e.dx+yy*e.dy)*e.inv));squared=Math.min(squared,(xx-t*e.dx)**2+(yy-t*e.dy)**2);}
-    let distance=Math.sqrt(squared);if(d.bore)distance=Math.min(distance,Math.hypot(x,y)-d.bore/2);
-    const upper=Math.min(p.thickness,p.thickness-d.topDepth+distance*Math.tan(top));
-    const lower=Math.max(0,d.bottomDepth-distance*Math.tan(bottom));
-    worst=Math.max(worst,(z-upper)*Math.cos(top),(lower-z)*Math.cos(bottom));
+    const distance=Math.sqrt(squared),boreDistance=Math.hypot(x,y)-d.bore/2;
+    const boreTop=(p.boreChamferTopAngle??p.chamferTopAngle)*Math.PI/180,boreBottom=(p.boreChamferBottomAngle??p.chamferBottomAngle)*Math.PI/180;
+    worst=Math.max(worst,z-p.thickness,-z,
+      (z-p.thickness+d.topDepth-distance*Math.tan(top))*Math.cos(top),
+      (d.bottomDepth-distance*Math.tan(bottom)-z)*Math.cos(bottom));
+    if(d.bore)worst=Math.max(worst,
+      (z-p.thickness+d.boreTopDepth-boreDistance*Math.tan(boreTop))*Math.cos(boreTop),
+      (d.boreBottomDepth-boreDistance*Math.tan(boreBottom)-z)*Math.cos(boreBottom));
   };
   for(let i=0;i<positions.length;i+=3)check(positions[i],positions[i+1],positions[i+2]);
   for(let i=0;i<indices.length;i+=3){const a=indices[i]*3,b=indices[i+1]*3,c=indices[i+2]*3;check((positions[a]+positions[b]+positions[c])/3,(positions[a+1]+positions[b+1]+positions[c+1])/3,(positions[a+2]+positions[b+2]+positions[c+2])/3);}
@@ -40,4 +44,10 @@ test('unequal chamfer angles preserve the intended surface envelope',async()=>{
   const p={...structuredClone(DEFAULTS),texts:[],rollerCount:12,thickness:19.05,chamferTop:.635,chamferBottom:.381,chamferTopAngle:30,chamferBottomAngle:60,quality:'fine'};
   const m=await buildSolid(api,p,()=>null);
   assert.ok(surfaceError(m.positions,m.indices,p)<QUALITY.fine.tolerance+.0003);
+});
+
+test('independent bore and outer bevels remain inside the exported surface envelope',async()=>{
+  const p={...structuredClone(DEFAULTS),texts:[],thickness:19.05,chamferTop:.7,chamferBottom:.2,chamferTopAngle:30,chamferBottomAngle:60,boreChamferTop:1.2,boreChamferBottom:.4,boreChamferTopAngle:55,boreChamferBottomAngle:35,quality:'fine'};
+  const m=await buildSolid(api,p,()=>null),roundtrip=read3MF(exportModel('3mf',m,p));
+  assert.equal(m.components,1);assert.ok(surfaceError(roundtrip.positions,roundtrip.indices,p)<QUALITY.fine.tolerance+.0003);
 });

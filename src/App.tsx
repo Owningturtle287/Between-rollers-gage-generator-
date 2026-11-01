@@ -5,6 +5,8 @@ import { Field, Section, Toggle } from './components/Fields';
 import { Viewer } from './components/Viewer';
 import { Icon } from './components/Icon';
 import type { Model, Project, TextLayer, ViewSettings } from './types';
+import { formatDimension } from './core/units.mjs';
+import { changeChamfer, linkChamfers } from './core/chamfer-settings.mjs';
 
 const STORAGE='between-rollers-project-v1';
 const cloneDefaults=()=>structuredClone(DEFAULTS) as Project;
@@ -24,13 +26,28 @@ function Select({label,value,onChange,options}:{label:string;value:string;onChan
   return <label className="field"><span className="field-label">{label}</span><select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
+function ChamferControls({project:p,area,onChange}:{project:Project;area:'outer'|'bore';onChange:(edit:(previous:Project)=>Project)=>void}){
+  const bore=area==='bore',prefix=bore?'boreChamfer':'chamfer',name=bore?'Bore':'Outer',disabled=bore&&!p.boreEnabled;
+  return <>
+    <label className="chamfer-link"><input type="checkbox" checked={bore?p.boreChamfersLinked:p.outerChamfersLinked} disabled={disabled}
+      aria-label={`Match ${area} top and bottom chamfers`} onChange={e=>{const linked=e.target.checked;onChange(prev=>linkChamfers(prev,area,linked) as Project);}}/><span>Match top and bottom</span></label>
+    <div className="field-grid">{(['Top','Bottom'] as const).map(face=><div className="chamfer-face" key={face}>
+      <Field label={`${name} ${face.toLowerCase()} chamfer`} value={p[(prefix+face) as keyof Project] as number} units={p.units} disabled={disabled}
+        onChange={v=>onChange(prev=>changeChamfer(prev,area,face,'size',v) as Project)}/>
+      <Field label={`${name} ${face.toLowerCase()} angle`} value={p[(prefix+face+'Angle') as keyof Project] as number} units="deg" dimension={false} min={1} max={89} disabled={disabled}
+        onChange={v=>onChange(prev=>changeChamfer(prev,area,face,'angle',v) as Project)}/>
+    </div>)}</div>
+    {disabled&&<p className="fine-note">Enable the center bore to apply bore chamfers.</p>}
+  </>;
+}
+
 export default function App(){
   const [p,setP]=useState<Project>(getInitial),[tab,setTab]=useState<'geometry'|'text'|'print'>('geometry');
   const [model,setModel]=useState<Model|null>(null),[renderedProject,setRenderedProject]=useState<Project>(p);
   const [buildError,setBuildError]=useState({signature:'',message:''}),[saved,setSaved]=useState(true);
   const [modal,setModal]=useState<null|'export'|'help'>(null),[format,setFormat]=useState('3mf'),[exporting,setExporting]=useState(false);
   const [selectedText,setSelectedText]=useState(p.texts[0]?.id||''),[notice,setNotice]=useState(''),[hasUndo,setHasUndo]=useState(false);
-  const [settings,setSettings]=useState<ViewSettings>({rollers:true,dimensions:false,grid:true,wireframe:false,material:DEFAULTS.color,view:'iso',reset:0});
+  const [settings,setSettings]=useState<ViewSettings>({rollerMode:'metal',grid:true,wireframe:false,material:DEFAULTS.color,view:'iso',reset:0});
   const [zoom,setZoom]=useState({id:0,factor:1});
   const [installEvent,setInstallEvent]=useState<(Event&{prompt:()=>Promise<void>})|null>(null);
   const fileInput=useRef<HTMLInputElement>(null),fontInput=useRef<HTMLInputElement>(null),worker=useRef<Worker|null>(null);
@@ -40,8 +57,8 @@ export default function App(){
   const issues=validate(p),d=derive(p),error=buildError.signature===signature?buildError.message:'';
   const building=model?.signature!==signature&&!issues.length&&!error;
   const ready=!!model&&model.signature===signature&&!issues.length&&!error;
-  const units=p.units,unitFactor=units==='in'?25.4:1;
-  const fmt=(n:number,digits=units==='in'?4:2)=>Number.isFinite(n)?(n/unitFactor).toFixed(digits):'—';
+  const units=p.units;
+  const fmt=(n:number)=>formatDimension(n,units);
   const update=(key:keyof Project,value:unknown)=>setP(prev=>({...prev,[key]:value}));
   const updateView=(key:keyof ViewSettings,value:unknown)=>setSettings(s=>({...s,[key]:value}));
   const activeText=p.texts.find(t=>t.id===selectedText)||p.texts[0];
@@ -108,7 +125,7 @@ export default function App(){
     finally{setExporting(false);}
   };
   const setTarget=(position:number)=>update('targetPosition',position);
-  const viewButton=(view:ViewSettings['view'],icon:string,title:string)=><button className={`tool-button ${settings.view===view?'active':''}`} aria-label={title} title={title} aria-pressed={settings.view===view} onClick={()=>setSettings(s=>({...s,view,reset:s.reset+1}))}><Icon name={icon}/></button>;
+  const viewButton=(view:ViewSettings['view'],label:string,shortcut:string)=><button className={`view-button ${settings.view===view?'active':''}`} aria-label={`${label} view`} title={`${label} view · ${shortcut}`} aria-pressed={settings.view===view} onClick={()=>setSettings(s=>({...s,view,reset:s.reset+1}))}>{label}</button>;
 
   return <div className="app-shell">
     <header className="app-header">
@@ -186,16 +203,21 @@ export default function App(){
               <p className="fine-note">If a measured diameter prints 0.010 in small, enter <strong>+0.010 in</strong>. Each side moves 0.005 in. Roller size, gap dimensions, lettering, and thickness stay nominal.</p>
               <Toggle label="Also compensate bore diameter" checked={p.compensateBore} onChange={v=>update('compensateBore',v)} description={p.boreEnabled?`Modeled bore Ø ${fmt(d.bore)} ${units}`:'Applies when the center bore is enabled'}/>
             </Section>
-            <Section number="02" title="Face chamfers">
-              <p className="section-description">Size is the setback along the flat face. Angle is measured from that face. Enter zero size for a sharp edge.</p>
-              <div className="field-grid"><Field label="Top chamfer" value={p.chamferTop} onChange={v=>update('chamferTop',v)} units={units}/><Field label="Top angle" value={p.chamferTopAngle} onChange={v=>update('chamferTopAngle',v)} units="deg" dimension={false} min={1} max={89}/><Field label="Bottom chamfer" value={p.chamferBottom} onChange={v=>update('chamferBottom',v)} units={units}/><Field label="Bottom angle" value={p.chamferBottomAngle} onChange={v=>update('chamferBottomAngle',v)} units="deg" dimension={false} min={1} max={89}/></div>
-              <div className="subtle-note"><Icon name="ruler" size={14}/>Full contact height: {fmt(d.contactHeight)} {units}</div>
+            <Section number="02" title="Outside diameter chamfers">
+              <p className="section-description">Chamfer the outside profile and probe reliefs. Size is the setback along the flat face; angle is measured from that face. Zero leaves a sharp edge.</p>
+              <ChamferControls project={p} area="outer" onChange={setP}/>
+              <div className="subtle-note">Full contact height: {fmt(d.contactHeight)} {units}</div>
             </Section>
-            <Section number="03" title="Mesh quality">
-              <Select label="Curve resolution" value={p.quality} onChange={v=>update('quality',v)} options={Object.entries(QUALITY).map(([value,q])=>({value,label:`${({draft:'Draft',standard:'Standard',fine:'Fine',ultra:'Ultra fine'} as Record<string,string>)[value]} · ${fmt(q.tolerance,units==='in'?4:4)} ${units} chord tolerance`}))}/>
+            <Section number="03" title="Bore chamfers">
+              <p className="section-description">Set the bore edges independently of the outside diameter.</p>
+              <ChamferControls project={p} area="bore" onChange={setP}/>
+              {p.boreEnabled&&<div className="subtle-note">Straight bore height: {fmt(d.boreContactHeight)} {units}</div>}
+            </Section>
+            <Section number="04" title="Mesh quality">
+              <Select label="Curve resolution" value={p.quality} onChange={v=>update('quality',v)} options={Object.entries(QUALITY).map(([value,q])=>({value,label:`${({draft:'Draft',standard:'Standard',fine:'Fine',ultra:'Ultra fine'} as Record<string,string>)[value]} · ${fmt(q.tolerance)} ${units} chord tolerance`}))}/>
               <p className="fine-note">Resolution controls curve smoothness. It does not change the entered chamfer size or angle.</p>
             </Section>
-            <Section number="04" title="Desktop & phone">
+            <Section number="05" title="Desktop & phone">
               <p className="section-description">Install Gage Studio for a dedicated window and home-screen icon. The app works offline after its first complete load.</p>
               {installEvent?<button className="small-button full-width" onClick={async()=>{await installEvent.prompt();setInstallEvent(null);}}><Icon name="install" size={16}/>Install Gage Studio</button>:<p className="fine-note">iPhone: Safari → Share → Add to Home Screen.<br/>Android / desktop: use your browser’s Install app command.</p>}
               <button className="small-button full-width" onClick={saveProject}><Icon name="save" size={15}/>Save a portable project</button>
@@ -207,15 +229,15 @@ export default function App(){
       <section className="workspace" aria-label="3D design workspace" aria-busy={building}>
         <output className="sr-only" role="status">{ready?'Model ready':building?'Updating model':'Review model settings'}</output>
         <Viewer model={model} project={renderedProject} settings={{...settings,material:p.color}} zoomCommand={zoom}/>
-        <div className="viewport-tools"><div className="tool-group">{viewButton('iso','cube','Isometric view · 1')}{viewButton('top','top','Top view · 2')}{viewButton('bottom','bottom','Bottom view · 3')}{viewButton('front','front','Front view · 4')}</div><div className="tool-group"><button className="tool-button" aria-label="Zoom in" title="Zoom in" onClick={()=>setZoom(z=>({id:z.id+1,factor:.82}))}><Icon name="plus"/></button><button className="tool-button" aria-label="Zoom out" title="Zoom out" onClick={()=>setZoom(z=>({id:z.id+1,factor:1.22}))}><Icon name="minus"/></button><button className="tool-button" aria-label="Fit model" title="Fit model · F" onClick={()=>setSettings(s=>({...s,reset:s.reset+1}))}><Icon name="frame"/></button></div></div>
-        <div className="display-tools" aria-label="Preview options">{([{key:'rollers',icon:'eye',title:'Roller guides'},{key:'dimensions',icon:'ruler',title:'Diameter guide'},{key:'grid',icon:'grid',title:'Grid'},{key:'wireframe',icon:'wire',title:'Wireframe'}] as const).map(t=><button key={t.key} className={`tool-button ${settings[t.key]?'active':''}`} aria-label={t.title} title={t.title} aria-pressed={settings[t.key]} onClick={()=>updateView(t.key,!settings[t.key])}><Icon name={t.icon}/></button>)}<span className="tool-separator"/><label className="color-control" title="Gage color"><span className="sr-only">Gage color</span><input type="color" aria-label="Gage color" value={p.color} onChange={e=>update('color',e.target.value)}/></label></div>
+        <div className="viewport-tools"><div className="tool-group view-presets" role="group" aria-label="Model orientation">{viewButton('iso','Iso','1')}{viewButton('top','Top','2')}{viewButton('bottom','Bottom','3')}{viewButton('front','Front','4')}</div><div className="tool-group"><button className="tool-button" aria-label="Zoom in" title="Zoom in" onClick={()=>setZoom(z=>({id:z.id+1,factor:.82}))}><Icon name="plus"/></button><button className="tool-button" aria-label="Zoom out" title="Zoom out" onClick={()=>setZoom(z=>({id:z.id+1,factor:1.22}))}><Icon name="minus"/></button><button className="tool-button" aria-label="Fit model" title="Fit model · F" onClick={()=>setSettings(s=>({...s,reset:s.reset+1}))}><Icon name="frame"/></button></div></div>
+        <div className="display-tools" aria-label="Preview options"><div className="roller-modes" role="group" aria-label="Roller appearance"><span className="roller-label">Rollers</span>{([{mode:'metal',icon:'roller',label:'Metal'},{mode:'clear',icon:'roller-clear',label:'See-through'},{mode:'off',icon:'roller-off',label:'Off'}] as const).map(t=><button key={t.mode} className={`roller-mode ${settings.rollerMode===t.mode?'active':''}`} aria-label={`${t.label} rollers`} title={`${t.label} rollers`} aria-pressed={settings.rollerMode===t.mode} onClick={()=>updateView('rollerMode',t.mode)}><Icon name={t.icon} size={16}/><span>{t.label}</span></button>)}</div><span className="tool-separator"/>{([{key:'grid',icon:'grid',title:'Grid'},{key:'wireframe',icon:'wire',title:'Wireframe'}] as const).map(t=><button key={t.key} className={`tool-button ${settings[t.key]?'active':''}`} aria-label={t.title} title={t.title} aria-pressed={settings[t.key]} onClick={()=>updateView(t.key,!settings[t.key])}><Icon name={t.icon}/></button>)}<label className="color-control" title="Gage color"><span className="sr-only">Gage color</span><input type="color" aria-label="Gage color" value={p.color} onChange={e=>update('color',e.target.value)}/></label></div>
         {(issues.length>0||error)&&<div className="validation-banner" role="alert"><Icon name="warning" size={18}/><div><strong>Adjust the model to continue</strong>{(issues.length?issues:[error]).map((msg:string)=><p key={msg}>{msg}</p>)}{model&&<small>Showing the previous valid model. Export is paused.</small>}</div></div>}
         {building&&<div className="building-pill"><span className="spinner"/>{model?'Updating geometry':'Preparing your workspace'}</div>}
       </section>
     </main>
     {notice&&<div className="toast" role="status"><Icon name="info" size={17}/><span>{notice}</span>{hasUndo&&<button onClick={()=>{if(undo.current){setP(undo.current);setSelectedText(undo.current.texts[0]?.id||'');setHasUndo(false);setNotice('Previous project restored.');}}}>Undo</button>}<button className="icon-button" aria-label="Dismiss notification" onClick={()=>setNotice('')}><Icon name="close" size={15}/></button></div>}
     {modal==='export'&&<Modal title="Ready for the next step." onClose={()=>setModal(null)}>
-      <p className="modal-description">Export the gage at its modeled size. Roller guides, grids, and dimensions are excluded.</p>
+      <p className="modal-description">Export the gage at its modeled size. Preview rollers and grids are excluded.</p>
       <div className="export-summary"><span className="export-model-icon"><Icon name="cube" size={28}/></span><div><strong>{p.name||'My roller gage'}</strong><span>{p.rollerCount} rollers · Ø {fmt(d.diameter)} {units} modeled span</span></div><span className={`health-chip ${ready?'':'invalid'}`}>{ready?'Watertight':'Not ready'}</span></div>
       <div className="export-formats" role="radiogroup" aria-label="Export format">{FORMATS.map(f=><label key={f.id} className={`format-option ${format===f.id?'selected':''}`}><input type="radio" name="format" value={f.id} checked={format===f.id} onChange={()=>setFormat(f.id)}/><strong>{f.label}</strong><span>{f.detail}</span>{f.id==='3mf'&&<small>BEST FOR PRINTING</small>}</label>)}</div>
       <div className="export-notes"><Icon name="info" size={17}/><p>{format==='3mf'?'3MF contains one solid in explicit millimeter units and a copy of the editable project. Open it as a model in your slicer.':'STL, OBJ, and PLY use millimeter coordinates. GLB uses meters and Y-up for standard 3D viewers.'}<br/>Lettering and chamfers are built into every exported mesh.<br/>{model?.triangles.toLocaleString()} triangles · {model?(model.volume/1000).toFixed(1):'—'} cm³</p></div>

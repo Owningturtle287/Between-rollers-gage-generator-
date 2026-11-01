@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { activatesPadKey, draftValue, editNumber } from '../core/number-entry.mjs';
 import { Icon } from './Icon';
 
-type Editor={id:string;label:string;units:string;anchor:HTMLInputElement;initial:string;onValue:(value:number)=>void};
+type Editor={id:string;label:string;units:string;precision:number;anchor:HTMLInputElement;initial:string;onValue:(value:number)=>void};
 type Session=Editor&{draft:string;replaceAll:boolean};
 type PadAPI={session:Session|null;open:(editor:Editor)=>void;close:(id?:string)=>void;press:(key:string)=>void};
 const PadContext=createContext<PadAPI|null>(null);
@@ -25,7 +25,7 @@ export function NumberPadProvider({children}:{children:ReactNode}){
   const press=(key:string)=>{
     const active=current.current;if(!active)return;
     if(key==='done'){close();return;}
-    const draft=editNumber(active.draft,key,active.replaceAll);
+    const draft=editNumber(active.draft,key,active.replaceAll,active.precision);
     const next={...active,draft,replaceAll:false};current.current=next;setSession(next);
     // Keep entry synchronous, while expensive model/UI updates yield to the next tap.
     const value=draftValue(draft);if(value!==null)startTransition(()=>active.onValue(value));
@@ -75,7 +75,7 @@ export function NumberPadProvider({children}:{children:ReactNode}){
       <div className="number-pad-heading"><span>{session.label}</span><output aria-label="Number being entered">{session.draft||'—'}</output><small>{session.units}</small><button type="button" aria-label="Close number pad" onClick={()=>close()}><Icon name="close" size={15}/></button></div>
       <div className="number-pad-keys">{keys.map(([key,label])=><button type="button" key={key} className={key==='done'?'pad-done':''}
         aria-label={key==='sign'?'Toggle negative sign':key==='decimal'?'Decimal point':key==='backspace'?'Backspace':key==='clear'?'Clear number':key==='done'?'Done entering number':label}
-        onPointerDown={e=>{e.preventDefault();if(activatesPadKey(e))press(key);}}
-        onClick={e=>{e.preventDefault();const pointerType='pointerType' in e.nativeEvent?String(e.nativeEvent.pointerType):'';if(activatesPadKey({type:e.type,detail:e.detail,pointerType}))press(key);}}>{label}</button>)}</div>
+        onPointerDown={e=>{e.preventDefault();e.stopPropagation();if(activatesPadKey(e,key))press(key);}}
+        onClick={e=>{e.preventDefault();e.stopPropagation();const pointerType='pointerType' in e.nativeEvent?String(e.nativeEvent.pointerType):'';if(activatesPadKey({type:e.type,detail:e.detail,pointerType},key))press(key);}}>{label}</button>)}</div>
     </div>,document.body)}</PadContext.Provider>;
 }

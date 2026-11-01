@@ -1,13 +1,17 @@
 import { ShapeUtils, Vector2 } from 'three';
+import { chamferSettings } from './chamfer-settings.mjs';
+import { formatDimension } from './units.mjs';
 
 export const DEFAULTS = {
-  version: 2, name: 'My roller gage', units: 'in', color: '#a9d5f0',
+  version: 3, name: 'My roller gage', units: 'in', color: '#a9d5f0',
   rollerCount: 12, rollerDiameter: 12.7,
   betweenMin: 101.346, betweenMax: 101.854, targetPosition: 0.5,
   thickness: 6.35, gapWidth: 5.588, gapLength: 5.08,
   cageDiameter: 109.84467545022416, boreEnabled: true, boreDiameter: 12.7,
   compensation: 0, compensateBore: true,
   chamferTop: 0.381, chamferBottom: 0.381, chamferTopAngle: 45, chamferBottomAngle: 45, quality: 'standard',
+  boreChamferTop: 0.381, boreChamferBottom: 0.381, boreChamferTopAngle: 45, boreChamferBottomAngle: 45,
+  outerChamfersLinked: true, boreChamfersLinked: true,
   texts: [{ id: 'label-1', enabled: true, text: 'GAGE STUDIO',
     face: 'top', mode: 'emboss', layout: 'arc', font: 'sans', weight: 'regular',
     italic: false, size: 4.4, depth: 0.5, tracking: 0.3,
@@ -62,12 +66,13 @@ export function derive(p) {
   const floor = diameter / 2 - p.gapLength;
   const bore = p.boreEnabled ? p.boreDiameter + (p.compensateBore ? p.compensation : 0) : 0;
   const toothAngle = Math.PI / p.rollerCount - Math.atan2(upper[0], upper[1]);
-  const topDepth=chamferDepth(p.chamferTop,p.chamferTopAngle);
-  const bottomDepth=chamferDepth(p.chamferBottom,p.chamferBottomAngle);
+  const c=chamferSettings(p);
+  const topDepth=chamferDepth(c.top,c.topAngle),bottomDepth=chamferDepth(c.bottom,c.bottomAngle);
+  const boreTopDepth=chamferDepth(c.boreTop,c.boreTopAngle),boreBottomDepth=chamferDepth(c.boreBottom,c.boreBottomAngle);
   return { nominal, diameter, rollerRadius: r, pitchRadius, contactAngle: angle,
-    contact: flat.contact, flatLength:flat.flatLength, lower, upper, floor, tipRadius, bore, topDepth, bottomDepth,
+    contact: flat.contact, flatLength:flat.flatLength, lower, upper, floor, tipRadius, bore, topDepth, bottomDepth,boreTopDepth,boreBottomDepth,
     toothWidth: 2 * tipRadius * Math.sin(toothAngle),
-    web: floor - bore / 2, contactHeight: p.thickness - topDepth - bottomDepth,
+    web: floor - bore / 2, contactHeight: p.thickness - topDepth - bottomDepth,boreContactHeight:p.thickness-boreTopDepth-boreBottomDepth,
   };
 }
 
@@ -76,6 +81,8 @@ export function validate(p) {
   const keys = ['rollerCount','rollerDiameter','betweenMin','betweenMax','targetPosition','thickness',
     'gapWidth','gapLength','cageDiameter','boreDiameter','compensation','chamferTop','chamferBottom','chamferTopAngle','chamferBottomAngle'];
   if (keys.some(k => !finite(p[k]))) return ['Every dimension must be a finite number.'];
+  const c=chamferSettings(p);
+  if(Object.values(c).some(v=>!finite(v)))return ['Every chamfer dimension must be a finite number.'];
   if (!Number.isInteger(p.rollerCount) || p.rollerCount < 3 || p.rollerCount > 80) issues.push('Use a whole roller count from 3 to 80.');
   if (p.betweenMin <= 0 || p.betweenMax < p.betweenMin) issues.push('Between-roller maximum must be at least the positive minimum.');
   if (p.targetPosition < 0 || p.targetPosition > 1) issues.push('The target must be inside the minimum and maximum.');
@@ -84,13 +91,13 @@ export function validate(p) {
   }
   if (p.gapWidth >= p.rollerDiameter) issues.push('Gap width must be smaller than the roller diameter.');
   if (p.boreEnabled && p.boreDiameter <= 0) issues.push('Bore diameter must be greater than zero.');
-  if (p.chamferTop < 0 || p.chamferBottom < 0) issues.push('Chamfer sizes cannot be negative.');
-  if(p.chamferTopAngle<1||p.chamferTopAngle>89||p.chamferBottomAngle<1||p.chamferBottomAngle>89)issues.push('Chamfer angles must be between 1° and 89°, measured from the flat face.');
+  if ([c.top,c.bottom,c.boreTop,c.boreBottom].some(v=>v<0)) issues.push('Chamfer sizes cannot be negative.');
+  if([c.topAngle,c.bottomAngle,c.boreTopAngle,c.boreBottomAngle].some(v=>v<1||v>89))issues.push('Chamfer angles must be between 1° and 89°, measured from the flat face.');
   if (p.thickness > 1000 || p.betweenMax > 10000 || p.cageDiameter>10000 || p.rollerDiameter > 1000) issues.push('Dimensions exceed the supported modeling range (10 m span / 1 m roller or thickness).');
   if(p.color&&!/^#[0-9a-f]{6}$/i.test(p.color))issues.push('Choose a valid six-digit gage color.');
   if (issues.length) return issues;
   const d = derive(p);
-  const format=n=>`${(n/(p.units==='in'?25.4:1)).toFixed(p.units==='in'?4:3)} ${p.units||'mm'}`;
+  const format=n=>`${formatDimension(n,p.units)} ${p.units||'mm'}`;
   if (d.diameter > 10000 || !finite(d.pitchRadius)) issues.push('The compensated diameter exceeds the 10 m modeling range.');
   if(!finite(d.flatLength)||d.flatLength<.01)issues.push('Cage Clearance Diameter is too small for the roller span and gap. Increase the outside diameter.');
   if (!finite(d.contactAngle) || d.contactAngle > rad(85)) issues.push('Cage Clearance Diameter is too large for centered outward support. Reduce it or change the roller/gap dimensions.');
@@ -100,6 +107,7 @@ export function validate(p) {
   if (2 * d.pitchRadius * Math.sin(Math.PI / p.rollerCount) <= p.rollerDiameter + .05) issues.push('Neighboring rollers overlap. Increase the span or reduce roller count or diameter.');
   if (d.web <= .2) issues.push('The bore and relief leave too little material. Reduce the bore or gap length.');
   if(d.contactHeight<.05)issues.push(`Chamfers use ${format(d.topDepth+d.bottomDepth)} of a ${format(p.thickness)} thickness. Reduce a chamfer size or angle to leave a contact band.`);
+  if(p.boreEnabled&&d.boreContactHeight<.05)issues.push(`Bore chamfers use ${format(d.boreTopDepth+d.boreBottomDepth)} of a ${format(p.thickness)} thickness. Reduce a bore chamfer size or angle to leave a bore wall.`);
   if ((p.texts?.length || 0) > 6) issues.push('Use up to six text layers.');
   for (const t of p.texts || []) if (t.enabled && t.text.trim()) {
     if (t.text.length > 120) issues.push('Keep each text layer within 120 characters.');
@@ -173,9 +181,15 @@ export function baseMesh(p) {
 }
 
 export function importProject(value) {
-  if (!value || ![1,2].includes(value.version) || typeof value.name !== 'string') throw new Error('This is not a supported Gage Studio project.');
-  const p={...structuredClone(DEFAULTS),...value,version:2};
+  if (!value || ![1,2,3].includes(value.version) || typeof value.name !== 'string') throw new Error('This is not a supported Gage Studio project.');
+  const p={...structuredClone(DEFAULTS),...value,version:3};
   if(value.version===1){p.cageDiameter=legacyCageDiameter({...p,flatLength:value.flatLength??5.08});}
+  if(value.version<3){
+    p.boreChamferTop=p.chamferTop;p.boreChamferBottom=p.chamferBottom;
+    p.boreChamferTopAngle=p.chamferTopAngle;p.boreChamferBottomAngle=p.chamferBottomAngle;
+    p.outerChamfersLinked=p.boreChamfersLinked=p.chamferTop===p.chamferBottom&&p.chamferTopAngle===p.chamferBottomAngle;
+  }
+  if(typeof p.outerChamfersLinked!=='boolean'||typeof p.boreChamfersLinked!=='boolean')throw new Error('Invalid chamfer linking option.');
   delete p.flatLength;
   if(!['in','mm'].includes(p.units)||!Object.keys(QUALITY).includes(p.quality)) throw new Error('Unsupported units or mesh quality.');
   if(!Array.isArray(p.texts)||p.texts.length>6) throw new Error('Invalid text layer list.');

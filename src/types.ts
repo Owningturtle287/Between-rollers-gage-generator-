@@ -12,6 +12,8 @@ export type Project = {
   thickness: number; gapWidth: number; gapLength: number; cageDiameter: number;
   boreEnabled: boolean; boreDiameter: number; compensation: number; compensateBore: boolean;
   chamferTop: number; chamferBottom: number; chamferTopAngle: number; chamferBottomAngle: number;
+  boreChamferTop: number; boreChamferBottom: number; boreChamferTopAngle: number; boreChamferBottomAngle: number;
+  outerChamfersLinked: boolean; boreChamfersLinked: boolean;
   quality: 'draft'|'standard'|'fine'|'ultra';
   texts: TextLayer[]; customFont?: string; customFontName?: string;
 };
@@ -20,6 +22,6 @@ export type Model = {
   triangles: number; components: number; zOffset: number; milliseconds: number; signature: string;
 };
 export type ViewSettings = {
-  rollers: boolean; dimensions: boolean; grid: boolean; wireframe: boolean;
+  rollerMode: 'metal'|'clear'|'off'; grid: boolean; wireframe: boolean;
   material: string; view: 'iso'|'top'|'bottom'|'front'; reset: number;
 };

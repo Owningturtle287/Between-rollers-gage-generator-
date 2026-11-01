@@ -1,4 +1,5 @@
 import { QUALITY } from './geometry.mjs';
+import { chamferSettings } from './chamfer-settings.mjs';
 
 // Extend cutters outside the stock and past adjacent edges. Ending a cutter
 // exactly on a stock wall leaves microscopic connected membranes after CSG;
@@ -20,32 +21,35 @@ function edgeWedge(api, a, b, width, depth, thickness, top, keep, margin) {
   return keep(new api.Manifold(new api.Mesh({numProp:3,vertProperties:new Float32Array(positions),triVerts:new Uint32Array(triangles)})));
 }
 
-export function faceSection(api, outline, bore, setback, keep, segments=256) {
+export function faceSection(api, outline, bore, setback, keep, segments=256,boreSetback=setback) {
   let face=keep(new api.CrossSection([outline],'Positive'));
-  if(bore>0)face=keep(face.subtract(keep(api.CrossSection.circle(bore/2,segments))));
-  return setback?keep(face.offset(-setback,'Round',2,segments)):face;
+  if(setback)face=keep(face.offset(-setback,'Round',2,segments));
+  if(bore>0)face=keep(face.subtract(keep(api.CrossSection.circle(bore/2+boreSetback,segments))));
+  return face;
 }
 
 export function applyChamfers(api, solid, outline, p, d, keep) {
-  if(!p.chamferTop&&!p.chamferBottom)return solid;
+  const c=chamferSettings(p);
+  if(!c.top&&!c.bottom&&(!d.bore||(!c.boreTop&&!c.boreBottom)))return solid;
   const q=QUALITY[p.quality]||QUALITY.standard,cuts=[];
   const margin=Math.max(1e-5,solid.tolerance()*16);
   for(const top of [true,false]){
-    const width=top?p.chamferTop:p.chamferBottom;
-    if(!width)continue;
+    const width=top?c.top:c.bottom,boreWidth=top?c.boreTop:c.boreBottom;
+    if(!width&&(!d.bore||!boreWidth))continue;
     const depth=top?d.topDepth:d.bottomDepth;
-    if(faceSection(api,outline,d.bore,width,keep,q.circleSegments).isEmpty())throw new Error(`The ${top?'top':'bottom'} chamfer removes its entire flat face. Reduce its size.`);
-    const coneSegments=Math.max(16,Math.ceil(Math.PI/Math.acos(Math.max(-1,1-q.tolerance/width))));
-    for(let i=0;i<outline.length;i++){
+    const boreDepth=top?d.boreTopDepth:d.boreBottomDepth;
+    if(faceSection(api,outline,d.bore,width,keep,q.circleSegments,boreWidth).isEmpty())throw new Error(`The ${top?'top':'bottom'} chamfers remove the entire flat face. Reduce their sizes.`);
+    const coneSegments=width?Math.max(16,Math.ceil(Math.PI/Math.acos(Math.max(-1,1-q.tolerance/width)))):16;
+    for(let i=0;width&&i<outline.length;i++){
       const a=outline[i],b=outline[(i+1)%outline.length],prev=outline[(i+outline.length-1)%outline.length];
       cuts.push(edgeWedge(api,a,b,width,depth,p.thickness,top,keep,margin));
       const turn=(a[0]-prev[0])*(b[1]-a[1])-(a[1]-prev[1])*(b[0]-a[0]);
       const extendedWidth=width+margin*width/depth;
       if(turn< -1e-7)cuts.push(keep(api.Manifold.cylinder(depth+margin,top?0:extendedWidth,top?extendedWidth:0,coneSegments).translate([a[0],a[1],top?p.thickness-depth:-margin])));
     }
-    if(d.bore>0){
-      const inner=Math.max(0,d.bore/2-margin*width/depth),outer=d.bore/2+width+margin*width/depth;
-      cuts.push(keep(api.Manifold.cylinder(depth+2*margin,top?inner:outer,top?outer:inner,q.circleSegments).translate([0,0,top?p.thickness-depth-margin:-margin])));
+    if(d.bore>0&&boreWidth){
+      const inner=Math.max(0,d.bore/2-margin*boreWidth/boreDepth),outer=d.bore/2+boreWidth+margin*boreWidth/boreDepth;
+      cuts.push(keep(api.Manifold.cylinder(boreDepth+2*margin,top?inner:outer,top?outer:inner,q.circleSegments).translate([0,0,top?p.thickness-boreDepth-margin:-margin])));
     }
   }
   const cut=keep(api.Manifold.union(cuts)),raw=keep(solid.subtract(cut));

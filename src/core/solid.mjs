@@ -1,5 +1,6 @@
 import { baseMesh, derive, validate, QUALITY } from './geometry.mjs';
 import { applyChamfers, faceSection } from './chamfer.mjs';
+import { chamferSettings } from './chamfer-settings.mjs';
 
 const baseCache=new WeakMap();
 const baseKey=p=>JSON.stringify({...p,name:undefined,units:undefined,color:undefined,texts:undefined,customFont:undefined,customFontName:undefined});
@@ -94,8 +95,8 @@ export async function buildSolid(api,p,resolveFont) {
       if(!glyphs.length)continue;
       const sections=glyphs.map(contours=>keep(new api.CrossSection(contours,'EvenOdd')));
       const text=keep(api.CrossSection.union(sections));
-      const faceChamfer=t.face==='top'?p.chamferTop:p.chamferBottom;
-      const face=faceSection(api,cached.outline,d.bore,faceChamfer+.03,keep,(QUALITY[p.quality]||QUALITY.standard).circleSegments);
+      const c=chamferSettings(p),faceChamfer=t.face==='top'?c.top:c.bottom,boreChamfer=t.face==='top'?c.boreTop:c.boreBottom;
+      const face=faceSection(api,cached.outline,d.bore,faceChamfer+.03,keep,(QUALITY[p.quality]||QUALITY.standard).circleSegments,boreChamfer+.03);
       const outside=keep(text.subtract(face));
       if(outside.area()>.002)throw new Error(`Text “${t.text.slice(0,24)}” crosses a relief, bore, chamfer, or outer edge. Move it inward or reduce its size.`);
       const eps=.03;

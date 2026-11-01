@@ -10,6 +10,8 @@ import { buildSolid, compactMesh } from '../src/core/solid.mjs';
 import { exportModel } from '../src/core/export.mjs';
 import { toMillimeters, fromMillimeters } from '../src/core/units.mjs';
 import { applyChamfers } from '../src/core/chamfer.mjs';
+import { changeChamfer, linkChamfers } from '../src/core/chamfer-settings.mjs';
+import { formatDimension } from '../src/core/units.mjs';
 
 let api,font,base,lettered;
 const params=(overrides={})=>({...structuredClone(DEFAULTS),texts:[],...overrides});
@@ -56,7 +58,7 @@ test('inch chamfer input is independent of millimeter mesh tolerance',async()=>{
 test('old flat-length projects migrate to an identical cage envelope',()=>{
   const legacy={...params(),version:1,flatLength:5.08};delete legacy.cageDiameter;
   const migrated=importProject(legacy),d=derive(migrated);
-  assert.equal(migrated.version,2);assert.equal('flatLength' in migrated,false);
+  assert.equal(migrated.version,3);assert.equal('flatLength' in migrated,false);
   near(d.flatLength,5.08);near(migrated.cageDiameter,legacyCageDiameter(legacy));
   near(migrated.cageDiameter,DEFAULTS.cageDiameter);
 });
@@ -124,7 +126,54 @@ test('formerly intersecting chamfers resolve at fine and ultra quality',async()=
 test('project round-trip retains exact physical dimensions when switching units',()=>{
   const p=params({units:'mm'}),next=importProject(JSON.parse(JSON.stringify(p)));
   near(derive(next).diameter,derive(p).diameter);assert.equal(next.units,'mm');
-  assert.throws(()=>importProject({...p,version:3}));assert.throws(()=>importProject({...p,units:'cm'}));assert.throws(()=>importProject({...p,texts:[{...DEFAULTS.texts[0],face:'side'}]}));
+  assert.throws(()=>importProject({...p,version:4}));assert.throws(()=>importProject({...p,units:'cm'}));assert.throws(()=>importProject({...p,texts:[{...DEFAULTS.texts[0],face:'side'}]}));
+});
+
+test('perimeter and bore chamfers remove independently calculated volumes',async()=>{
+  const p=params({quality:'fine',chamferTop:0,chamferBottom:0,boreChamferTop:0,boreChamferBottom:0});
+  const sharp=await buildSolid(api,p,async()=>font);
+  const inner={...p,boreChamferTop:.8,boreChamferBottom:.2,boreChamferTopAngle:30,boreChamferBottomAngle:60};
+  const bore=await buildSolid(api,inner,async()=>font);checkClosed(bore);
+  const removed=(w,angle)=>Math.PI*w*Math.tan(angle*Math.PI/180)*(p.boreDiameter/2*w+w*w/3);
+  near(sharp.volume-bore.volume,removed(.8,30)+removed(.2,60),.003);
+  near(derive(inner).contactHeight,p.thickness);
+  const outer={...p,chamferTop:.6,chamferBottom:.3,chamferTopAngle:35,chamferBottomAngle:55};
+  const perimeter=await buildSolid(api,outer,async()=>font);
+  const both=await buildSolid(api,{...outer,boreChamferTop:.8,boreChamferBottom:.2,boreChamferTopAngle:30,boreChamferBottomAngle:60},async()=>font);
+  checkClosed(perimeter);checkClosed(both);near(perimeter.volume-both.volume,sharp.volume-bore.volume,.005);
+  near(derive(outer).boreContactHeight,p.thickness);
+});
+
+test('linked top and bottom controls synchronize sizes and angles within their own group',()=>{
+  let p=params();p=changeChamfer(p,'outer','Bottom','size',.9);
+  near(p.chamferTop,.9);near(p.chamferBottom,.9);near(p.boreChamferTop,DEFAULTS.boreChamferTop);
+  p=changeChamfer(p,'bore','Top','angle',30);assert.equal(p.boreChamferBottomAngle,30);assert.equal(p.chamferTopAngle,45);
+  p=linkChamfers(p,'outer',false);p=changeChamfer(p,'outer','Bottom','size',.2);
+  near(p.chamferTop,.9);near(p.chamferBottom,.2);
+  p=linkChamfers(p,'outer',true);near(p.chamferBottom,.9);
+});
+
+test('legacy project migration preserves all original bore and perimeter chamfers',async()=>{
+  const old=params({version:2,chamferTop:.7,chamferBottom:.2,chamferTopAngle:30,chamferBottomAngle:60});
+  for(const key of ['boreChamferTop','boreChamferBottom','boreChamferTopAngle','boreChamferBottomAngle','outerChamfersLinked','boreChamfersLinked'])delete old[key];
+  const migrated=importProject(old);
+  assert.equal(migrated.version,3);near(migrated.boreChamferTop,.7);near(migrated.boreChamferBottom,.2);assert.equal(migrated.boreChamferTopAngle,30);assert.equal(migrated.outerChamfersLinked,false);
+  const before=await buildSolid(api,old,async()=>font),after=await buildSolid(api,migrated,async()=>font);
+  assert.deepEqual(before.positions,after.positions);assert.deepEqual(before.indices,after.indices);
+});
+
+test('inch and millimeter dimensions display six decimal places without changing physical values',()=>{
+  for(const units of ['in','mm']){
+    const physical=toMillimeters(1.123456,units);assert.equal(formatDimension(physical,units),'1.123456');
+    assert.equal(formatDimension(0,units),'0.000000');assert.equal(formatDimension(toMillimeters(-.000001,units),units),'-0.000001');
+    const p=params({units,thickness:physical}),roundtrip=importProject(JSON.parse(JSON.stringify(p)));
+    near(roundtrip.thickness,physical,1e-12);
+  }
+});
+
+test('invalid bore chamfers are rejected independently of the outer chamfers',()=>{
+  for(const extra of [{boreChamferTop:-1},{boreChamferBottom:NaN},{boreChamferTopAngle:90},{boreChamferTop:4,boreChamferBottom:4}])assert.ok(validate(params(extra)).length);
+  assert.deepEqual(validate(params({boreEnabled:false,boreChamferTop:4,boreChamferBottom:4})),[]);
 });
 test('3MF is a valid OPC package with millimeter units and all final triangles',()=>{
   const bytes=exportModel('3mf',lettered,DEFAULTS),files=unzipSync(bytes);
